@@ -379,7 +379,9 @@ void GLGizmoSupportFins::render_overlay()
         m_overlay_dirty = false;
     }
 
-    if (m_selected_fin_model_id != m_selected_fin) {
+    // Also drop the highlight whenever nothing is selected: the deselect paths (remove, generate,
+    // undo, closing the gizmo) reset both ids to invalid, which alone would leave the old mesh drawn.
+    if (m_selected_fin_model_id != m_selected_fin || (!m_selected_fin.valid() && m_selected_fin_model.is_initialized())) {
         m_selected_fin_model.reset();
         if (m_selected_fin.valid()) {
             const Transform3d inst_m = mo->instances[inst_idx]->get_matrix();

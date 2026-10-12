@@ -127,7 +127,9 @@ std::string support_fins_report(const SupportFinStats &stats);
 /// winding restored on a mirrored transform. Empty when the object has no model parts.
 indexed_triangle_set support_fins_posed_part(const ModelObject &object, int instance_idx = 0);
 
-/// Hash of (posed part, options) for SupportFinInfo::source_hash.
+/// Hash of (posed part, options). SupportFinInfo::source_hash is this hash of the posed part
+/// built WITHOUT the instance's translation (see object_source_hash in SupportFins.cpp), so a
+/// world-frame support_fins_posed_part() hash is not comparable with a stored source_hash.
 std::string support_fins_source_hash(const indexed_triangle_set &posed_part, const SupportFinOptions &options);
 
 /// Generate (or regenerate) the fin set of an object in place: removes the object's

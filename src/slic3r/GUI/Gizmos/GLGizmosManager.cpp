@@ -1158,6 +1158,15 @@ bool GLGizmosManager::on_char(wxKeyEvent& evt)
                 processed = true;
             break;
         }
+#ifdef __APPLE__
+        // The Mac "delete" key is WXK_BACK, which GLCanvas3D::on_char turns into
+        // EVT_GLTOOLBAR_DELETE (delete the whole selection): Support Fins takes it as its Delete.
+        case WXK_BACK: {
+            if (m_current == SupportFins && gizmo_event(SLAGizmoEventType::Delete))
+                processed = true;
+            break;
+        }
+#endif
         //case 'A':
         //case 'a':
         //{

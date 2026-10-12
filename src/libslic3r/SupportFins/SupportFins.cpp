@@ -590,12 +590,10 @@ std::string support_fins_report(const SupportFinStats &stats)
 // ---------------------------------------------------------------------------------
 // Model glue
 
-indexed_triangle_set support_fins_posed_part(const ModelObject &object, int instance_idx)
+// The model-part soup of `object` under the instance matrix `inst` (see support_fins_posed_part).
+static indexed_triangle_set posed_part_with(const ModelObject &object, const Transform3d &inst)
 {
     indexed_triangle_set out;
-    if (instance_idx < 0 || size_t(instance_idx) >= object.instances.size())
-        return out;
-    const Transform3d &inst = object.instances[size_t(instance_idx)]->get_matrix();
     for (const ModelVolume *volume : object.volumes) {
         if (!volume->is_model_part() || volume->is_support_fin())
             continue;
@@ -615,6 +613,23 @@ indexed_triangle_set support_fins_posed_part(const ModelObject &object, int inst
             out.indices.emplace_back(base + f(0), base + (flip ? f(2) : f(1)), base + (flip ? f(1) : f(2)));
     }
     return out;
+}
+
+indexed_triangle_set support_fins_posed_part(const ModelObject &object, int instance_idx)
+{
+    if (instance_idx < 0 || size_t(instance_idx) >= object.instances.size())
+        return {};
+    return posed_part_with(object, object.instances[size_t(instance_idx)]->get_matrix());
+}
+
+// source_hash of the object as it is now. The instance's translation is left out of the
+// posed part: moving the object on the plate (arrange, ensure_on_bed) then gives
+// bit-identical input, where the world-frame float32 soup would round differently and flip
+// the 1 um quantisation of some vertices, marking the fins stale after every move.
+static std::string object_source_hash(const ModelObject &object, int instance_idx, const SupportFinOptions &options)
+{
+    const Transform3d inst_no_offset = object.instances[size_t(instance_idx)]->get_transformation().get_matrix_no_offset();
+    return support_fins_source_hash(posed_part_with(object, inst_no_offset), options);
 }
 
 std::string support_fins_source_hash(const indexed_triangle_set &posed_part, const SupportFinOptions &options)
@@ -660,7 +675,6 @@ SupportFinStats apply_support_fins(ModelObject &object, const SupportFinOptions 
     const indexed_triangle_set posed = support_fins_posed_part(object, instance_idx);
     if (posed.indices.empty())
         throw std::invalid_argument("Support Fins: the object has no model parts to support");
-    const std::string hash = support_fins_source_hash(posed, opts);
     SupportFinResult result = generate_support_fins(posed, opts);
 
     // Drop the previous generated set (drawn walls stay), highest index first.
@@ -669,6 +683,9 @@ SupportFinStats apply_support_fins(ModelObject &object, const SupportFinOptions 
         if (v->is_support_fin() && !v->support_fin->drawn)
             object.delete_volume(i);
     }
+    // Hashed only now: delete_volume() may have folded the last volume's matrix into the
+    // instance, which changes the translation-free pose object_source_hash() reads.
+    const std::string hash = object_source_hash(object, instance_idx, opts);
     int fin_number = 0, sway_number = 0;
     for (ModelVolume *v : object.volumes)
         if (v->is_support_fin()) {
@@ -729,6 +746,13 @@ bool add_drawn_support_fin(ModelObject &object, const Vec3d &a, const Vec3d &b, 
         if (v->is_support_fin() && v->support_fin->kind != "pad" && v->support_fin->kind != "sway")
             ++fin_number;
 
+    // support_fins_stale() hashes with the object's stored options: tag the wall with the
+    // same ones, or a wall drawn after a panel change reads as stale straight away. Hashed
+    // before add_volume(): the new volume is an untagged model part until the end.
+    SupportFinOptions hash_opts = object.support_fin_options ? *object.support_fin_options : opts;
+    hash_opts.validate();
+    const std::string hash = object_source_hash(object, instance_idx, hash_opts);
+
     const Transform3d inst_inv = object.instances[size_t(instance_idx)]->get_matrix().inverse();
     ModelVolume *v = object.add_volume(TriangleMesh(std::move(piece->mesh)), ModelVolumeType::MODEL_PART, /*modify_to_center_geometry=*/true);
     v->set_transformation(Transform3d(inst_inv * v->get_matrix()));
@@ -736,7 +760,7 @@ bool add_drawn_support_fin(ModelObject &object, const Vec3d &a, const Vec3d &b, 
     SupportFinInfo info;
     info.kind        = "drawn";
     info.piece_id    = piece->id;
-    info.source_hash = support_fins_source_hash(posed, opts);
+    info.source_hash = hash;
     info.drawn       = true;
     info.draw_a      = a;
     info.draw_b      = b;
@@ -769,7 +793,7 @@ bool support_fins_stale(const ModelObject &object, int instance_idx)
         return false;
     SupportFinOptions opts = *object.support_fin_options;
     opts.validate();
-    const std::string hash = support_fins_source_hash(support_fins_posed_part(object, instance_idx), opts);
+    const std::string hash = object_source_hash(object, instance_idx, opts);
     for (const ModelVolume *v : object.volumes)
         if (v->is_support_fin() && v->support_fin->source_hash != hash)
             return true;
