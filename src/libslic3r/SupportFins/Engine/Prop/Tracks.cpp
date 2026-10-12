@@ -1,20 +1,13 @@
 // Port of web/prop/tracks.js. See Tracks.hpp; the reasoning behind each step (and the
 // parts that measured it) is in the upstream file.
 #include "Tracks.hpp"
+#include "../Ieee754.hpp"
 #include "../Inside.hpp"
 #include "../Planes.hpp"
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
 
-#if __has_include("../Ieee754.hpp")
-#include "../Ieee754.hpp"
-#define SF_TRACKS_COS js_cos
-#define SF_TRACKS_TAN js_tan
-#else
-#define SF_TRACKS_COS std::cos
-#define SF_TRACKS_TAN std::tan
-#endif
 
 namespace Slic3r { namespace SupportFins {
 
@@ -41,7 +34,7 @@ inline Vec3d rotN(const Rot &rot, double x, double y, double z) {
 std::vector<PropPatch> splitRegion(const Topology &topo, const std::vector<int> &faces, const Rot &rot) {
     const auto &nrm = topo.nrm;
     const auto &area = topo.area;
-    const double agreeCut = SF_TRACKS_COS((PROP.splitAgreeDeg * M_PI) / 180);
+    const double agreeCut = js_cos((PROP.splitAgreeDeg * M_PI) / 180);
     const FaceAdjacency adj = faceAdjacency(topo);
     const auto &start = adj.start;
     const auto &nbr = adj.nbr;
@@ -123,7 +116,7 @@ std::optional<std::vector<ContactLine>> tubeLine(const Topology &topo, const std
     mx /= mn; my /= mn; mz /= mn;
 
     // The FRACTION of area that deviates, never the worst face.
-    const double cut = SF_TRACKS_COS((PROP.tubeSpreadDeg * M_PI) / 180);
+    const double cut = js_cos((PROP.tubeSpreadDeg * M_PI) / 180);
     double deviant = 0;
     for (const auto &[v, a] : rn) {
         if (v[0] * mx + v[1] * my + v[2] * mz < cut) deviant += a;
@@ -323,7 +316,7 @@ Tracks patchTracks(const std::vector<Vec3d> &pts, const SurfTris &patchTris, dou
     // `span` is the requested row spacing from the coverage slider (coverRowSpan).
     const double rowSpan = jsMax(1, span);
     // (free-edge rows only under a near-flat underside -- see PROP.edgeFlatDeg)
-    const bool flat = slope <= SF_TRACKS_TAN((PROP.edgeFlatDeg * M_PI) / 180);
+    const bool flat = slope <= js_tan((PROP.edgeFlatDeg * M_PI) / 180);
     RowProbe probe;
     if (support && flat) {
         probe.support = support; probe.patchTris = &patchTris;
