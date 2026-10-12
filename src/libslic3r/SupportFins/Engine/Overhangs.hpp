@@ -3,6 +3,7 @@
 //   analyze()        applies an orientation, re-seats on the plate, classifies, clusters regions
 #pragma once
 #include "Math.hpp"
+#include <memory>
 #include <vector>
 
 namespace Slic3r { namespace SupportFins {
@@ -11,6 +12,8 @@ inline constexpr double BED_EPS = 0.35;           // mm; a face this close to th
 inline constexpr double MIN_REGION_AREA = 12.0;   // mm^2; ignore slivers
 inline constexpr double DEFAULT_THRESHOLD = 45;   // degrees from the plate
 inline constexpr double ANGLE_EPS = 1e-4;         // ~0.008 degrees of slack
+
+struct InsideGrid;   // Inside.hpp
 
 struct Topology {
     Soup                 pos;      // 9 per face, the input soup (unrotated, unseated)
@@ -24,6 +27,13 @@ struct Topology {
     std::vector<double>  _zr;
     std::vector<int>     _parent;
     std::vector<uint8_t> _over, _kept, _onBed;
+    // inside.js caches, written onto the topo object upstream (topo._insideGrid,
+    // topo._scSeen, topo._scGen). mutable: the queries take a const Topology&, as JS
+    // callers just hand the topo along. Built from `pos` only (orientation-free); a
+    // copy of the Topology shares the grid, which stays valid because pos is copied too.
+    mutable std::shared_ptr<const InsideGrid> _insideGrid;
+    mutable std::vector<int32_t>              _scSeen;
+    mutable int64_t                           _scGen = 0;   // JS `topo._scGen | 0`: undefined -> 0
 };
 
 struct Region {
