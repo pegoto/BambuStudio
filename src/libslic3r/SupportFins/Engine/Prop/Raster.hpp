@@ -59,7 +59,7 @@ struct RasterPiece : ContactLine {
 std::vector<RasterPiece> rasterRest(const ContactLine &line, const Run &run);
 
 /// [first, end) into a triangle list (JS [s, e]).
-using TriRange = std::array<size_t, 2>;
+// TriRange: Math.hpp (std::array<size_t, 2>, [first, end) elements of a Tris)
 
 /// buildProps' prop record: every field prop.js writes (plate, part-attached and squat
 /// walls alike) and raster.js / rival.js / fins.js read. JS `undefined` fields are

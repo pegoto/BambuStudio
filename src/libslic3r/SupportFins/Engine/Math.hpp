@@ -31,6 +31,10 @@ using Tris = std::vector<Vec3d>;
 
 struct Offset { double x = 0, y = 0, z = 0; };
 
+/// A range [first, end) of ELEMENTS of a Tris (vertex triples; /3 for triangles).
+/// One definition for every module (fins.js triRanges, prop records, sway ribs).
+using TriRange = std::array<size_t, 2>;
+
 inline constexpr double INF = std::numeric_limits<double>::infinity();
 
 /// JS Math.round: half rounds toward +infinity (Math.round(-2.5) == -2).

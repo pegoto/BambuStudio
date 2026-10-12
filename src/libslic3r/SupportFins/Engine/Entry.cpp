@@ -73,8 +73,8 @@ EntryResult computeFins(const Soup &positions, const EntryOptions &opts) {
     for (const FinRecord &f : built.fins) {
         PieceRange p; p.id = std::to_string(f.id); p.kind = f.kind;
         for (const TriRange &r : f.triRanges) {
-            p.ranges.emplace_back(r.first / 3, r.second / 3);
-            if (f.kind == "sway") swayTris += (r.second - r.first) / 3;
+            p.ranges.emplace_back(int(r[0] / 3), int(r[1] / 3));
+            if (f.kind == "sway") swayTris += int((r[1] - r[0]) / 3);
         }
         out.pieces.push_back(std::move(p));
     }

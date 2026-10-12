@@ -52,9 +52,6 @@ struct BuildOpts {
     Tunables    tunables;
 };
 
-/// A range [first, end) of ELEMENTS of Built::triangles (vertex triples here, so a
-/// triangle range is divided by 3 to get triangle indices; fins_entry.js piecesOf).
-using TriRange = std::pair<int, int>;
 
 /// One fin's record (fins.js `fins[]`): what the UI addresses, removes and reports.
 struct FinRecord {

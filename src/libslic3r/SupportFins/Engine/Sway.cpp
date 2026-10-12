@@ -561,7 +561,7 @@ SwayBraces buildSwayBraces(const Topology &topo, const AnalyzeResult &result, co
                 if (r.ok && !swayClashes(r, ribs) && !swayClashesWall(r, walls)) { placed = std::move(r); break; }
             }
             if (!placed) { skipped++; continue; }
-            placed->triRange = TriRange(int(out.size()), int(out.size() + placed->tris.size()));
+            placed->triRange = TriRange{out.size(), out.size() + placed->tris.size()};
             for (const Vec3d &v : placed->tris) out.push_back(v);
             res.tags.insert(res.tags.end(), placed->tags.begin(), placed->tags.end());
             tines += placed->tines;

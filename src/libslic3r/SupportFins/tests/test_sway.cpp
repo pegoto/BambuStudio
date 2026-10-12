@@ -155,8 +155,8 @@ void checkRib(const SwayRib &r, const json &e, const std::string &P, bool withTr
     if (e.contains("triRange")) {
         if (!r.triRange) fail(P + ": no triRange");
         else {
-            checkI(r.triRange->first, e["triRange"][0].get<long>(), P + ".triRange[0]");
-            checkI(r.triRange->second, e["triRange"][1].get<long>(), P + ".triRange[1]");
+            checkI(int((*r.triRange)[0]), e["triRange"][0].get<long>(), P + ".triRange[0]");
+            checkI(int((*r.triRange)[1]), e["triRange"][1].get<long>(), P + ".triRange[1]");
         }
     } else if (r.triRange) fail(P + ": unexpected triRange");
     if (withTris) checkTris(r.tris, r.tags, e["tris"], e["tags"], P + ".tris");
@@ -279,10 +279,10 @@ bool runDump(const fs::path &file) {
             const SwayRib &r = s.ribs[k];
             checkRib(r, o["ribs"][k], P + ".ribs[" + std::to_string(k) + "]", false);
             // the rib's own tris are its triRange slice of `triangles`
-            if (r.triRange && r.triRange->second <= int(s.triangles.size())) {
-                bool same = r.triRange->second - r.triRange->first == int(r.tris.size());
+            if (r.triRange && int((*r.triRange)[1]) <= int(s.triangles.size())) {
+                bool same = int((*r.triRange)[1]) - int((*r.triRange)[0]) == int(r.tris.size());
                 for (int i = 0; same && i < int(r.tris.size()); i++)
-                    same = r.tris[i] == s.triangles[r.triRange->first + i] && r.tags[i] == s.tags[r.triRange->first + i];
+                    same = r.tris[i] == s.triangles[int((*r.triRange)[0]) + i] && r.tags[i] == s.tags[int((*r.triRange)[0]) + i];
                 if (!same) fail(P + ".ribs[" + std::to_string(k) + "]: tris != triRange slice");
             }
         }
