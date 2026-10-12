@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -34,6 +35,7 @@ namespace fs = std::filesystem;
 
 static long g_checks = 0, g_fail = 0, g_inexact = 0;
 static std::string g_ctx;
+static const bool g_verbose = std::getenv("PAD_VERBOSE") != nullptr;   // print the first non-bit-identical doubles
 
 static double num(const json &j) {
     if (j.is_string()) {
@@ -57,6 +59,7 @@ static void checkD(double got, double want, const char *what) {
     if (std::isnan(got) && std::isnan(want)) return;
     if (got == want) { if (std::signbit(got) != std::signbit(want)) g_inexact++; return; }
     g_inexact++;
+    if (g_verbose && g_inexact <= 30) std::fprintf(stderr, "inexact %s: %s got %.17g want %.17g\n", g_ctx.c_str(), what, got, want);
     if (std::isfinite(got) && std::isfinite(want) && std::abs(got - want) <= 1e-9) return;
     char b[256];
     std::snprintf(b, sizeof b, "%s: got %.17g want %.17g", what, got, want);

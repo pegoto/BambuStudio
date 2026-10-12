@@ -66,7 +66,13 @@ void checkD(double got, const json &jw, const std::string &what) {
     const double want = num(jw);
     g_checks++; g_doubles++;
     if (std::isnan(got) && std::isnan(want)) return;
-    if (got == want) { if (std::signbit(got) != std::signbit(want)) g_inexact++; return; }
+    if (got == want) {
+        if (std::signbit(got) != std::signbit(want)) {
+            g_inexact++;
+            if (g_verbose) std::printf("  inexact [%s] %s: got %g want %g (sign of zero)\n", g_ctx.c_str(), what.c_str(), got, want);
+        }
+        return;
+    }
     g_inexact++;
     if (g_verbose) std::printf("  inexact [%s] %s: got %.17g want %.17g\n", g_ctx.c_str(), what.c_str(), got, want);
     const double err = std::abs(got - want) / std::max(1.0, std::abs(want));
