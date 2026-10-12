@@ -65,7 +65,7 @@ const SCENES = [
   ['staircase', '40,0,0'], ['sphere', '0,0,0'], ['tube', '40,0,0'], ['cylinder', '40,0,0'], ['coin', '40,0,0'],
   ['ramp', '40,0,0'], ['plus', '40,0,0'], ['needle', '40,0,0'], ['lowledge', '40,0,0'],
   // the other call shapes: walls on the part (prop.js part-attached: a floor under the
-  // overhang)   // (portal / ushape on their side: a flat ceiling, no bite; tilted 60: tines), squat
+  // overhang; portal / ushape on their side have a flat ceiling, no bite; tilted 60: tines), squat
   // walls (brim minTop; they sit under near-level faces, so no tine lands -- see the
   // `squat` replay below), wedges (the six-argument call)
   ['portal', '0,60,0'], ['ushape', '0,60,0'], ['portal', '0,90,0'], ['lowledge', '0,0,0'],
