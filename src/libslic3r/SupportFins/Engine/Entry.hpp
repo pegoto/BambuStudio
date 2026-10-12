@@ -54,4 +54,24 @@ Offset seatSoup(const Soup &input, Soup &pos);
 /// fins_entry.js computeFins(positions, options). Throws std::invalid_argument on a bad option.
 EntryResult computeFins(const Soup &positions, const EntryOptions &options);
 
+/// draw_entry.js drawWall's result when it builds (ok): one drawn wall, SEATED frame.
+struct EntryDrawResult {
+    bool               ok = false;
+    std::vector<float> triangles;        // 9 per face, float32 like upstream (seat.js flatten)
+    Offset             offset;           // seated = input + offset
+    struct {
+        double length = 0, height = 0;
+        int    tines = 0;
+        bool   partAttached = false;     // it stands on the part below, not the plate
+    } stats;
+};
+
+/// draw_entry.js drawWall(positions, a, b, options): one wall along the line the user
+/// drew from `a` to `b` (same frame as `positions`). Reads material, tines, tineDensity,
+/// layerHeight, plateOnly, threshold, padStyle (validated) and cutout from `options`.
+/// On a refusal returns ok = false and sets `reason` (the site's words, UTF-8).
+/// Forwards to Draw.hpp's drawWall. Throws std::invalid_argument like computeFins.
+EntryDrawResult drawWall(const Soup &positions, const Vec3d &a, const Vec3d &b, const EntryOptions &options,
+                         std::string &reason);
+
 }} // namespace

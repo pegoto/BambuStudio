@@ -1,4 +1,5 @@
 #include "Entry.hpp"
+#include "Draw.hpp"
 #include "Materials.hpp"
 #include <algorithm>
 #include <stdexcept>
@@ -90,6 +91,31 @@ EntryResult computeFins(const Soup &positions, const EntryOptions &opts) {
     s.unserved = built.unserved;
     s.floating = int(built.floating.size());
     s.floatingDrop = built.floating.empty() ? 0 : built.floating[0].drop;
+    return out;
+}
+
+EntryDrawResult drawWall(const Soup &positions, const Vec3d &a, const Vec3d &b, const EntryOptions &options,
+                         std::string &reason) {
+    DrawWallOptions o;
+    o.material = options.material;
+    o.tines = options.tines;
+    o.tineDensity = options.tineDensity;
+    o.layerHeight = options.layerHeight;
+    o.plateOnly = options.plateOnly;
+    o.threshold = options.threshold;
+    o.padStyle = options.padStyle;
+    o.cutout = options.cutout;
+    const DrawWallResult r = drawWall(positions, a, b, o);
+    EntryDrawResult out;
+    reason.clear();
+    if (!r.ok) { reason = r.reason; return out; }
+    out.ok = true;
+    out.triangles = r.triangles;
+    out.offset = r.offset;
+    out.stats.length = r.stats.length;
+    out.stats.height = r.stats.height;
+    out.stats.tines = r.stats.tines;
+    out.stats.partAttached = r.stats.partAttached;
     return out;
 }
 
