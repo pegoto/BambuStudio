@@ -413,15 +413,9 @@ std::optional<SupportFinInfo> SupportFinInfo::from_string(const std::string &str
 // ---------------------------------------------------------------------------------
 // Engine
 
-SupportFinResult generate_support_fins(const indexed_triangle_set &posed_part, const SupportFinOptions &options)
+// fins_entry.js computeFins(positions): 9 doubles per face, already posed.
+static sf::Soup soup_of(const indexed_triangle_set &posed_part)
 {
-    const SupportFinOptions opts = checked(options);
-
-    SupportFinResult out;
-    if (posed_part.indices.empty())
-        return out;
-
-    // fins_entry.js computeFins(positions): 9 doubles per face, already posed.
     sf::Soup soup;
     soup.reserve(posed_part.indices.size() * 9);
     for (const stl_triangle_vertex_indices &f : posed_part.indices)
@@ -431,9 +425,13 @@ SupportFinResult generate_support_fins(const indexed_triangle_set &posed_part, c
             soup.push_back(double(v.y()));
             soup.push_back(double(v.z()));
         }
+    return soup;
+}
 
+// The engine options for a checked SupportFinOptions (mode left to the caller).
+static sf::EntryOptions entry_options_of(const SupportFinOptions &opts)
+{
     sf::EntryOptions eo;
-    eo.mode        = "auto";
     eo.bedPad      = opts.pad_style != "off";
     eo.padStyle    = opts.pad_style;
     eo.tines       = opts.tines;
@@ -456,7 +454,47 @@ SupportFinResult generate_support_fins(const indexed_triangle_set &posed_part, c
             sw.gap = mat->propGap;
         eo.sway = sw;
     }
+    return eo;
+}
 
+// Weld the engine's seated float32 triangles [first, end) into `mesh`, un-seated
+// (world = seated - offset). The engine emits bit-identical floats for a vertex shared
+// by two triangles, so exact equality is the right weld test.
+static void weld_triangles(const std::vector<float> &tris, size_t first, size_t end, const sf::Offset &offset, indexed_triangle_set &mesh)
+{
+    std::unordered_map<VertexKey, int, VertexKeyHash> index_of;
+    for (int v = 0; v < int(mesh.vertices.size()); ++v)
+        index_of.emplace(vertex_key(mesh.vertices[v].x() + float(offset.x), mesh.vertices[v].y() + float(offset.y), mesh.vertices[v].z() + float(offset.z)), v);
+    for (size_t t = first; t < end; ++t) {
+        stl_triangle_vertex_indices face;
+        for (int k = 0; k < 3; ++k) {
+            const float *p = &tris[t * 9 + size_t(k) * 3];
+            const VertexKey key = vertex_key(p[0], p[1], p[2]);
+            auto it = index_of.find(key);
+            if (it == index_of.end()) {
+                const int idx = int(mesh.vertices.size());
+                mesh.vertices.emplace_back(float(double(p[0]) - offset.x), float(double(p[1]) - offset.y), float(double(p[2]) - offset.z));
+                it = index_of.emplace(key, idx).first;
+            }
+            face(k) = it->second;
+        }
+        // a face with a repeated corner has no area: drop it
+        if (face(0) != face(1) && face(1) != face(2) && face(0) != face(2))
+            mesh.indices.push_back(face);
+    }
+}
+
+SupportFinResult generate_support_fins(const indexed_triangle_set &posed_part, const SupportFinOptions &options)
+{
+    const SupportFinOptions opts = checked(options);
+
+    SupportFinResult out;
+    if (posed_part.indices.empty())
+        return out;
+
+    const sf::Soup    soup = soup_of(posed_part);
+    sf::EntryOptions  eo   = entry_options_of(opts);
+    eo.mode = "auto";
     const sf::EntryResult res = sf::computeFins(soup, eo);
 
     // seated = input + offset, so world = seated - offset.
@@ -466,31 +504,8 @@ SupportFinResult generate_support_fins(const indexed_triangle_set &posed_part, c
         piece.kind = pr.kind;
         if (pr.id == "pad" || !parse_int(pr.id, piece.id))
             piece.id = -1;
-        // Weld on the seated float32 values: the engine emits bit-identical floats for
-        // a vertex shared by two triangles, so exact equality is the right test.
-        std::unordered_map<VertexKey, int, VertexKeyHash> index_of;
-        for (const auto &[first, end] : pr.ranges) {
-            const size_t a = size_t(std::max(first, 0)), b = std::min(size_t(std::max(end, 0)), n_tris);
-            for (size_t t = a; t < b; ++t) {
-                stl_triangle_vertex_indices face;
-                for (int k = 0; k < 3; ++k) {
-                    const float *p = &res.triangles[t * 9 + size_t(k) * 3];
-                    const VertexKey key = vertex_key(p[0], p[1], p[2]);
-                    auto it = index_of.find(key);
-                    if (it == index_of.end()) {
-                        const int idx = int(piece.mesh.vertices.size());
-                        piece.mesh.vertices.emplace_back(float(double(p[0]) - res.offset.x),
-                                                         float(double(p[1]) - res.offset.y),
-                                                         float(double(p[2]) - res.offset.z));
-                        it = index_of.emplace(key, idx).first;
-                    }
-                    face(k) = it->second;
-                }
-                // a face with a repeated corner has no area: drop it
-                if (face(0) != face(1) && face(1) != face(2) && face(0) != face(2))
-                    piece.mesh.indices.push_back(face);
-            }
-        }
+        for (const auto &[first, end] : pr.ranges)
+            weld_triangles(res.triangles, size_t(std::max(first, 0)), std::min(size_t(std::max(end, 0)), n_tris), res.offset, piece.mesh);
         if (!piece.mesh.indices.empty())
             out.pieces.push_back(std::move(piece));
     }
@@ -516,13 +531,31 @@ SupportFinResult generate_support_fins(const indexed_triangle_set &posed_part, c
     return out;
 }
 
-std::optional<SupportFinPiece> draw_support_fin_wall(const indexed_triangle_set & /*posed_part*/, const Vec3d & /*a*/, const Vec3d & /*b*/,
+std::optional<SupportFinPiece> draw_support_fin_wall(const indexed_triangle_set &posed_part, const Vec3d &a, const Vec3d &b,
                                                      const SupportFinOptions &options, std::string &reason)
 {
-    // TODO(draw): wire Engine drawWall (web/draw.js port, Engine/Draw.*) once it exists.
-    (void) checked(options);
-    reason = "Draw mode is not available yet";
-    return std::nullopt;
+    const SupportFinOptions opts = checked(options);
+    reason.clear();
+    if (posed_part.indices.empty()) {
+        reason = "The object has no model parts to support";
+        return std::nullopt;
+    }
+    // draw_entry.js drawWall(soup, a, b, options): a and b in the soup's (posed) frame.
+    const sf::Soup   soup = soup_of(posed_part);
+    sf::EntryOptions eo   = entry_options_of(opts);
+    eo.mode = "draw";
+    const sf::EntryDrawResult res = sf::drawWall(soup, sf::Vec3d(a.x(), a.y(), a.z()), sf::Vec3d(b.x(), b.y(), b.z()), eo, reason);
+    if (!res.ok)
+        return std::nullopt;
+    SupportFinPiece piece;
+    piece.kind = "drawn";
+    piece.id   = -1;
+    weld_triangles(res.triangles, 0, res.triangles.size() / 9, res.offset, piece.mesh);
+    if (piece.mesh.indices.empty()) {
+        reason = "No wall fits between these two points";
+        return std::nullopt;
+    }
+    return piece;
 }
 
 // plugins/shared/py/supportfins_host.py host_report()
