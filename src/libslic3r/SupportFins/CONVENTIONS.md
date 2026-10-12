@@ -25,6 +25,7 @@ triangles in the same order. Readability against upstream matters more than C++ 
 | `web/fins.js` | `Engine/Fins.{hpp,cpp}` (header done, .cpp is a stub) |
 | `web/sway.js` | `Engine/Sway.{hpp,cpp}` |
 | `plugins/shared/engine/fins_entry.js` + `seat.js` | `Engine/Entry.{hpp,cpp}` (done) |
+| V8 `src/base/ieee754.cc` (JS `Math.*`) | `Engine/Ieee754.{hpp,cpp}` (done) |
 
 Keep upstream's function names (camelCase) and argument order. Keep upstream's comments
 where they explain a number or a decision; drop the ones that are history. Put the JS
@@ -64,9 +65,15 @@ file name in the header comment of each unit.
 - `Math.hypot` -> `hypot2`/`hypot3` (V8's scaled Kahan algorithm, NOT `std::hypot`,
   which differs in the last bit on ~40% of inputs). `x.toFixed(n)` rounds ties away
   from zero on the exact decimal value; printf rounds to even (see Cutout.cpp toFixed9).
-  V8's `Math.asin/acos/atan2/sin/cos/exp/log` are fdlibm; glibc can differ by 1-2 ulp.
-  So far only a debug field (`lean`) is affected; if a decision flips on one of these,
-  port that function from V8's src/base/ieee754.cc instead of tolerating it.
+- Transcendentals: `Math.sin/cos/tan/asin/acos/atan/atan2/exp/expm1/log/log1p/log2/
+  log10/cbrt/sinh/cosh/tanh/asinh/acosh/atanh/pow` (and `**`) -> `js_sin`, `js_cos`, ...
+  `js_pow` from `Engine/Ieee754.hpp` (V8 12.4's own fdlibm port, pinned bit-for-bit
+  against Node 22 by `tests/test_ieee754.cpp`; glibc differs in the last bit on a few
+  percent of inputs). **Never** call `std::sin/cos/tan/asin/acos/atan/atan2/exp/log/pow/
+  cbrt` (or the bare C names) in `Engine/`, not even for a constant like
+  `cos(45deg)`. `std::sqrt` (correctly rounded in both), `std::floor/ceil/abs/fabs/fmod`
+  stay; `Math.hypot` is `hypot2/hypot3`. A test that recomputes a transcendental to
+  compare with a JS dump uses the `js_*` function too.
 - No fused multiply-add: the standalone build passes `-ffp-contract=off` and the
   libslic3r build must too for these sources (aarch64 fuses by default).
 - Floating point: keep the same operations in the same order. Do not "simplify" an
@@ -82,6 +89,7 @@ file name in the header comment of each unit.
 cmake -S standalone -B build-sf -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build-sf
 SUPPORT_FINS_DIR=/home/user/gittrahan/support-fins tools/gen_refs.sh refs   # once
+node tools/ieee754_ref.mjs                  # once: refs_ieee754/ for test_ieee754
 ./build-sf/sf_parity refs/*.json            # end-to-end parity (fails until buildFins is real)
 ctest --test-dir build-sf                   # per-module unit tests
 ```
