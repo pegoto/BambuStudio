@@ -4,6 +4,14 @@ name: Build macOS arm64
 # macos-15/arm64), so a feature branch can be compiled and packaged without
 # spending the other eight runners. Artifact: BambuStudio_Mac_arm64_<version>.
 on:
+  push:
+    branches:
+      - 'claude/**'
+    paths:
+      - 'src/**'
+      - '**/CMakeLists.txt'
+      - 'resources/**'
+      - '.github/workflows/build_mac_arm64.yml'
   workflow_dispatch:
     inputs:
       build-deps-only:
