@@ -17,6 +17,7 @@
 #include "slic3r/GUI/Gizmos/GLGizmoSlaSupports.hpp"
 #include "slic3r/GUI/Gizmos/GLGizmoFdmSupports.hpp"
 #include "slic3r/GUI/Gizmos/GLGizmoBrimEars.hpp"
+#include "slic3r/GUI/Gizmos/GLGizmoSupportFins.hpp"
 // BBS
 #include "slic3r/GUI/Gizmos/GLGizmoAdvancedCut.hpp"
 #include "slic3r/GUI/Gizmos/GLGizmoFaceDetector.hpp"
@@ -115,6 +116,7 @@ bool GLGizmosManager::init()
     m_gizmos.emplace_back(new GLGizmoFdmSupports(m_parent, EType::FdmSupports));
     m_gizmos.emplace_back(new GLGizmoSeam(m_parent, EType::Seam));
     m_gizmos.emplace_back(new GLGizmoBrimEars(m_parent, EType::BrimEars));
+    m_gizmos.emplace_back(new GLGizmoSupportFins(m_parent, EType::SupportFins));
     m_gizmos.emplace_back(new GLGizmoFuzzySkin(m_parent, EType::FuzzySkin));
     m_gizmos.emplace_back(new GLGizmoMeasure(m_parent, EType::Measure));
     m_gizmos.emplace_back(new GLGizmoSimplify(m_parent, EType::Simplify));
@@ -1011,7 +1013,7 @@ bool GLGizmosManager::on_mouse(wxMouseEvent& evt)
 
     if (evt.LeftDown() && (!control_down || grabber_contains_mouse())) {
         if ((m_current == SlaSupports || m_current == Hollow || m_current == Svg || is_paint_gizmo() || m_current == Text || m_current == Cut || m_current == MeshBoolean ||
-            m_current == BrimEars)
+            m_current == BrimEars || m_current == SupportFins)
             && gizmo_event(SLAGizmoEventType::LeftDown, mouse_pos, evt.ShiftDown(), evt.AltDown()))
             // the gizmo got the event and took some action, there is no need to do anything more
             processed = true;
@@ -1048,10 +1050,10 @@ bool GLGizmosManager::on_mouse(wxMouseEvent& evt)
         // event was taken care of by the paint_gizmo
         processed = true;
     }
-    else if (evt.Dragging() && m_parent.get_move_volume_id() != -1 && (m_current == SlaSupports || m_current == Hollow || is_paint_gizmo() || m_current == BrimEars))
+    else if (evt.Dragging() && m_parent.get_move_volume_id() != -1 && (m_current == SlaSupports || m_current == Hollow || is_paint_gizmo() || m_current == BrimEars || m_current == SupportFins))
         // don't allow dragging objects with the Sla gizmo on
         processed = true;
-    else if (evt.Dragging() && !control_down && (m_current == SlaSupports || m_current == Hollow || is_paint_gizmo() || m_current == Cut || m_current == BrimEars)
+    else if (evt.Dragging() && !control_down && (m_current == SlaSupports || m_current == Hollow || is_paint_gizmo() || m_current == Cut || m_current == BrimEars || m_current == SupportFins)
         && gizmo_event(SLAGizmoEventType::Dragging, mouse_pos, evt.ShiftDown(), evt.AltDown())) {
         // the gizmo got the event and took some action, no need to do anything more here
         m_parent.set_as_dirty();
@@ -1065,7 +1067,7 @@ bool GLGizmosManager::on_mouse(wxMouseEvent& evt)
             gizmo_event(SLAGizmoEventType::RightUp, mouse_pos, evt.ShiftDown(), evt.AltDown(), true);
     }
     else if (evt.LeftUp()
-        && (m_current == SlaSupports || m_current == Hollow || is_paint_gizmo() || m_current == Cut || m_current == BrimEars)
+        && (m_current == SlaSupports || m_current == Hollow || is_paint_gizmo() || m_current == Cut || m_current == BrimEars || m_current == SupportFins)
         && gizmo_event(SLAGizmoEventType::LeftUp, mouse_pos, evt.ShiftDown(), evt.AltDown(), control_down)
         && !m_parent.is_mouse_dragging()) {
         // in case SLA/FDM gizmo is selected, we just pass the LeftUp event and stop processing - neither
@@ -1134,7 +1136,7 @@ bool GLGizmosManager::on_char(wxKeyEvent& evt)
             if (m_current != Undefined) {
                 if ((m_current == Measure || m_current == Assembly) && gizmo_event(SLAGizmoEventType::Escape)) {
                     // do nothing
-                } else if ((m_current != SlaSupports && m_current != BrimEars) || !gizmo_event(SLAGizmoEventType::DiscardChanges))
+                } else if ((m_current != SlaSupports && m_current != BrimEars && m_current != SupportFins) || !gizmo_event(SLAGizmoEventType::DiscardChanges))
                     reset_all_states();
 
                 processed = true;
@@ -1152,7 +1154,7 @@ bool GLGizmosManager::on_char(wxKeyEvent& evt)
         }
         //case WXK_BACK:
         case WXK_DELETE: {
-            if ((m_current == Cut || m_current == Measure || m_current == Assembly || m_current == BrimEars) && gizmo_event(SLAGizmoEventType::Delete))
+            if ((m_current == Cut || m_current == Measure || m_current == Assembly || m_current == BrimEars || m_current == SupportFins) && gizmo_event(SLAGizmoEventType::Delete))
                 processed = true;
             break;
         }
@@ -1515,6 +1517,8 @@ std::string GLGizmosManager::convert_gizmo_type_to_string(Slic3r::GUI::GLGizmosM
         return "Simplify";
     case Slic3r::GUI::GLGizmosManager::EType::BrimEars:
         return "BrimEars";
+    case Slic3r::GUI::GLGizmosManager::EType::SupportFins:
+        return "SupportFins";
     case Slic3r::GUI::GLGizmosManager::EType::SlaSupports:
         return "SlaSupports";
     case Slic3r::GUI::GLGizmosManager::EType::Hollow:

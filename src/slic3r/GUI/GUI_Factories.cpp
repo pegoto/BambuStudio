@@ -1327,6 +1327,8 @@ void MenuFactory::create_bbl_object_menu()
     // Object Simplify
     append_menu_item_simplify(&m_object_menu);
     append_menu_item_smooth_mesh(&m_object_menu);
+    // Support Fins gizmo
+    append_menu_item_support_fins(&m_object_menu);
     // merge to single part
     append_menu_item_merge_parts_to_single_part(&m_object_menu);
     //scale_selection_to_fit_print_volume
@@ -1992,6 +1994,29 @@ void MenuFactory::append_menu_item_smooth_mesh(wxMenu *menu)
 {
     wxMenuItem *menu_item = append_menu_item(
         menu, wxID_ANY, _L("Subdivision mesh") + _L("(Lost color)"), "", [](wxCommandEvent &) { obj_list()->smooth_mesh(); }, "", menu, []() { return plater()->can_smooth_mesh(); },
+        m_parent);
+}
+
+void MenuFactory::append_menu_item_support_fins(wxMenu *menu)
+{
+    append_menu_item(
+        menu, wxID_ANY, _L("Support Fins") + dots, _L("Generate breakaway support fins under the overhangs of the tilted part"),
+        [](wxCommandEvent &) {
+            Plater *p_plater = plater();
+            if (!p_plater || !p_plater->get_view3D_canvas3D())
+                return;
+            GLGizmosManager &mng = p_plater->get_view3D_canvas3D()->get_gizmos_manager();
+            if (mng.get_current_type() != GLGizmosManager::SupportFins)
+                mng.open_gizmo(GLGizmosManager::SupportFins);
+        },
+        "", menu,
+        []() {
+            Plater *p_plater = plater();
+            if (!p_plater || !p_plater->get_view3D_canvas3D())
+                return false;
+            const GLGizmoBase *gizmo = p_plater->get_view3D_canvas3D()->get_gizmos_manager().get_gizmo(GLGizmosManager::SupportFins);
+            return gizmo != nullptr && gizmo->is_activable();
+        },
         m_parent);
 }
 

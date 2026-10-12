@@ -82,6 +82,7 @@ public:
         FdmSupports,
         Seam,
         BrimEars,
+        SupportFins,
         FuzzySkin,
         Measure,
         Simplify,

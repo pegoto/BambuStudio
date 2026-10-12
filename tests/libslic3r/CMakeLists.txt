@@ -25,6 +25,7 @@ add_executable(${_TEST_NAME}_tests
     test_triangle_selector.cpp
     test_debounce.cpp
     test_emboss.cpp
+    test_support_fins.cpp
     ../libnest2d/printer_parts.cpp
 	)
 

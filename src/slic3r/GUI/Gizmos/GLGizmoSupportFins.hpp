@@ -41,7 +41,6 @@ public:
 protected:
     bool on_init() override;
     std::string on_get_name() const override;
-    std::string on_get_name_str() override { return "Support Fins"; }
     bool on_is_activable() const override;
     bool on_is_selectable() const override;
     CommonGizmosDataID on_get_requirements() const override;
@@ -127,7 +126,8 @@ private:
     // overhang analysis of the posed part (support_fins_posed_part)
     std::unique_ptr<SupportFins::Topology> m_topology;
     PoseKey               m_pose_key;
-    float                 m_analyzed_threshold = -1.f;
+    float                 m_overlay_threshold  = 45.f;  // committed threshold (slider released)
+    float                 m_analyzed_threshold = -1.f;  // threshold the overlay was computed for
     std::vector<uint8_t>  m_face_class;      // per posed face: 0 none, 1 red (fins), 2 amber (too small)
     indexed_triangle_set  m_posed_part;
     bool                  m_overlay_dirty = true; // GL models need rebuilding
@@ -135,7 +135,9 @@ private:
     GLModel               m_amber_model;
     int                   m_red_faces = 0;
     int                   m_amber_faces = 0;
+    bool                  m_has_fins = false;
     bool                  m_stale = false;
+    bool                  m_stale_dirty = true;  // re-evaluate m_has_fins / m_stale on the next render
 
     // Draw mode / fin selection
     std::vector<Vec3d>    m_draw_points;      // world coords, 0 or 1 pending point
