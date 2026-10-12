@@ -2,6 +2,7 @@
 #include "Draw.hpp"
 #include "Materials.hpp"
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 namespace Slic3r { namespace SupportFins {
@@ -59,7 +60,13 @@ EntryResult computeFins(const Soup &positions, const EntryOptions &opts) {
     bo.layerHeight = opts.layerHeight;
     bo.coverage = opts.coverage;
     bo.plateOnly = opts.plateOnly;
-    if (opts.sway) { bo.sway = *opts.sway; /* gap: the host's, else the material's */ }
+    // `sway` is forwarded whole; like the site, braces take the material's gap unless the
+    // host sets its own (JS `{ gap: mat.propGap, ...sway minus its null fields }`; a
+    // non-finite gap is this port's "unset").
+    if (opts.sway) {
+        bo.sway = *opts.sway;
+        if (!std::isfinite(bo.sway->gap)) bo.sway->gap = mat->propGap;
+    }
     bo.tunables = tunables;
     Built built = buildFins(topo, result, IDENTITY3, bo);
 

@@ -116,13 +116,16 @@ int main(int argc, char **argv) {
         Tunables t;
         t.padStyle = "bogus";
         t.padGrab = std::numeric_limits<double>::quiet_NaN();
-        t.padCustom.margin = INF;
-        t.padCustom.gap = 0.25;
+        t.padCustom.emplace();
+        t.padCustom->margin = INF;
+        t.padCustom->gap = 0.25;
         applyTunables(t);
         g_ctx = "applyTunables guards";
         checkS(PAD.style, "auto", "style kept"); checkD(PAD.grab, 0.05, "grab kept");
         checkD(PAD.custom.margin, 4.0, "custom.margin kept"); checkD(PAD.custom.gap, 0.25, "custom.gap set");
-        applyTunables(Tunables{});
+        Tunables t0;
+        t0.padCustom.emplace();   // JS { padCustom: { ...defaults } }
+        applyTunables(t0);
         checkD(PAD.custom.gap, 0.0, "custom.gap reset");
     }
 
@@ -178,8 +181,9 @@ int main(int argc, char **argv) {
             Tunables t;
             t.padH = m->padH; t.padGrab = m->padGrab; t.propGap = m->propGap;
             t.padStyle = P["style"].get<std::string>();
-            t.padCustom.h = num(P["custom"]["h"]); t.padCustom.gap = num(P["custom"]["gap"]);
-            t.padCustom.grip = num(P["custom"]["grip"]); t.padCustom.margin = num(P["custom"]["margin"]);
+            t.padCustom.emplace();
+            t.padCustom->h = num(P["custom"]["h"]); t.padCustom->gap = num(P["custom"]["gap"]);
+            t.padCustom->grip = num(P["custom"]["grip"]); t.padCustom->margin = num(P["custom"]["margin"]);
             applyTunables(t);
             const json &S = P["state"];
             checkD(PAD.grab, num(S["grab"]), "PAD.grab"); checkS(PAD.style, S["style"].get<std::string>(), "PAD.style");
