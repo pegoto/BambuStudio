@@ -5,6 +5,7 @@
 #include "PropConfig.hpp"
 #include "Cutout.hpp"
 #include "Fins/Pad.hpp"
+#include "Fins/Wedges.hpp"
 #include <cmath>
 
 namespace Slic3r { namespace SupportFins {
@@ -20,10 +21,10 @@ void applyTunables(const Tunables &t) {
     if (std::isfinite(t.padCustom.grip)) PAD.custom.grip = t.padCustom.grip;
     if (std::isfinite(t.padCustom.margin)) PAD.custom.margin = t.padCustom.margin;
     PROP.gap = t.propGap;
+    if (std::isfinite(t.propGap)) PERP.gap = t.propGap;
     PROP.iface = t.iface;
     if (t.tinesPerWall >= 0) PROP.tinesPerWall = t.tinesPerWall;
     if (isCutoutPattern(t.cutout)) CUT.pattern = t.cutout;
-    // PERP.gap: set by the owner of that module once it exists.
 }
 
 Built buildFins(Topology &topo, const AnalyzeResult &result, const Rot &rot, const BuildOpts &opts) {
