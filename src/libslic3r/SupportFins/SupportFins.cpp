@@ -622,14 +622,35 @@ indexed_triangle_set support_fins_posed_part(const ModelObject &object, int inst
     return posed_part_with(object, object.instances[size_t(instance_idx)]->get_matrix());
 }
 
-// source_hash of the object as it is now. The instance's translation is left out of the
-// posed part: moving the object on the plate (arrange, ensure_on_bed) then gives
-// bit-identical input, where the world-frame float32 soup would round differently and flip
-// the 1 um quantisation of some vertices, marking the fins stale after every move.
+// source_hash of the object as it is now: a POSE SIGNATURE, not a vertex hash. The
+// engine seats the part before it does anything, so only the orientation/scale of each
+// model part (the linear 3x3 of instance x volume, no translation), its mesh size and
+// the options decide the fins. A vertex hash broke on every move: the world-frame
+// float32 soup rounds differently after a translation and some vertices cross the
+// quantisation boundary (20 of 20 moves measured), and a 3MF reload re-centres meshes.
+// The linear part is rounded to 1e-6, well above float noise and below any rotation a
+// user can make. A mesh edit that keeps vertex and face counts is not detected; the
+// fins are then simply regenerated on request.
 static std::string object_source_hash(const ModelObject &object, int instance_idx, const SupportFinOptions &options)
 {
+    Fnv1a h;
     const Transform3d inst_no_offset = object.instances[size_t(instance_idx)]->get_transformation().get_matrix_no_offset();
-    return support_fins_source_hash(posed_part_with(object, inst_no_offset), options);
+    for (const ModelVolume *volume : object.volumes) {
+        if (!volume->is_model_part() || volume->is_support_fin())
+            continue;
+        const indexed_triangle_set &its = volume->mesh().its;
+        if (its.indices.empty())
+            continue;
+        const Eigen::Matrix3d lin = (inst_no_offset * volume->get_matrix()).linear();
+        for (int r = 0; r < 3; ++r)
+            for (int c = 0; c < 3; ++c)
+                h.i64(int64_t(std::llround(lin(r, c) * 1e6)));
+        h.i64(int64_t(its.vertices.size()));
+        h.i64(int64_t(its.indices.size()));
+    }
+    const std::string o = options.to_string();
+    h.bytes(o.data(), o.size());
+    return h.hex();
 }
 
 std::string support_fins_source_hash(const indexed_triangle_set &posed_part, const SupportFinOptions &options)
@@ -697,13 +718,15 @@ SupportFinStats apply_support_fins(ModelObject &object, const SupportFinOptions 
     // instances, so read the instance transform only now. The pieces are in the world
     // frame: a volume matrix of inst^-1 (composed with the centring add_volume applies)
     // puts them back exactly where the engine built them.
+    // frame: moved into the object's frame with inst^-1 BEFORE add_volume, so the volume
+    // matrix add_volume leaves behind is a plain translation (a skewed matrix from a
+    // scaled+rotated instance would be flagged by the UI and decomposes badly).
     const Transform3d inst_inv = instance_of(object, instance_idx).get_matrix().inverse();
     for (SupportFinPiece &piece : result.pieces) {
         if (piece.mesh.indices.empty())
             continue;
+        its_transform(piece.mesh, inst_inv, /*fix_left_handed=*/true);
         ModelVolume *v = object.add_volume(TriangleMesh(std::move(piece.mesh)), ModelVolumeType::MODEL_PART, /*modify_to_center_geometry=*/true);
-        // add_volume centred the mesh: mesh = world - shift, volume matrix = translate(shift).
-        v->set_transformation(Transform3d(inst_inv * v->get_matrix()));
         if (piece.kind == "sway")
             ++sway_number;
         else if (piece.kind != "pad")
@@ -754,8 +777,8 @@ bool add_drawn_support_fin(ModelObject &object, const Vec3d &a, const Vec3d &b, 
     const std::string hash = object_source_hash(object, instance_idx, hash_opts);
 
     const Transform3d inst_inv = object.instances[size_t(instance_idx)]->get_matrix().inverse();
+    its_transform(piece->mesh, inst_inv, /*fix_left_handed=*/true);   // object frame; translation-only volume matrix
     ModelVolume *v = object.add_volume(TriangleMesh(std::move(piece->mesh)), ModelVolumeType::MODEL_PART, /*modify_to_center_geometry=*/true);
-    v->set_transformation(Transform3d(inst_inv * v->get_matrix()));
     v->name = piece_name("drawn", fin_number + 1, 0);
     SupportFinInfo info;
     info.kind        = "drawn";
