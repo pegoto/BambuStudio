@@ -181,7 +181,7 @@ function runModel(name, poseStr) {
     const opts = { ...BASE, avoid: { walls } };
     const d = dumpBraces(opts);
     delete d._ribs;
-    runs.push({ name: 'avoidWalls', opts, out: d });
+    runs.push({ name: 'avoidWalls', opts: { ...opts, avoid: { walls: walls.map((l) => l.map(pt)) } }, out: d });
   }
 
   // clash checks on the Auto ribs: every ordered pair, and each against the walls
@@ -274,9 +274,9 @@ function runModel(name, poseStr) {
     SWAY: sway.SWAY,
     pos: Array.from(pos),
     topoArea: Array.from(topo.area), topoNrm: Array.from(topo.nrm),
-    offset: result.offset,
+    offset: { x: enc(result.offset.x), y: enc(result.offset.y), z: enc(result.offset.z) },
     bearings: patches.map((p) => Math.atan2(p.n.y, p.n.x)),
-    walls,
+    walls: walls.map((l) => l.map(pt)),
     runs, clashes, levelClashes, shifts: SHIFTS, clashAll, clashWall, clashWallEach, upright, atFace,
   };
 }

@@ -519,6 +519,9 @@ SwayBraces buildSwayBraces(const Topology &topo, const AnalyzeResult &result, co
     struct Cand { const WallPatch *p; double score, bearing; };
     const std::vector<WallPatch> patches = findWallPatches(topo, rot, result.offset);
     std::vector<Cand> cands;
+    // bearing: glibc atan2 vs V8's fdlibm differ by 1 ulp on some inputs (test_sway
+    // counts them). It only feeds the angGap < sep test below, which no 1-ulp change
+    // has flipped on the stress models; port ieee754::atan2 if one ever does.
     for (const WallPatch &p : patches) {
         if (std::abs(p.n.z) <= cut
             && p.z1 - jsMax(0, p.z0) >= SWAY.minFaceH
