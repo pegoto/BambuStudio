@@ -1,5 +1,14 @@
 # Support Fins → BambuStudio: native integration plan
 
+> **Status (2026-10-12):** the engine port is complete and bit-exact: 26 modules under
+> `src/libslic3r/SupportFins/Engine/`, 14 module parity tests, and the end-to-end runner
+> (`tools/parity.cpp`) reproduces the upstream JS output on all 59 reference scenes with
+> 100% of triangles identical in order and value. The libslic3r host API, model tags,
+> 3MF round-trip, slice-time warning and the gizmo are written; their first compile is the
+> macOS arm64 CI job (`.github/workflows/build_mac_arm64.yml`, runs on every push to a
+> `claude/*` branch). See `src/libslic3r/SupportFins/CONVENTIONS.md` for how the port is
+> organised, built standalone and re-verified against upstream.
+
 Source: https://github.com/gittrahan/support-fins (MIT). Target: this fork (AGPL-3.0, fine to vendor MIT code with attribution).
 
 ## What support-fins actually is
