@@ -7,10 +7,6 @@
 // pulls in the ones whose types appear in buildProps' contract (Prop/Raster.hpp holds
 // the prop record, the result and the raster veto; Prop/Rival.hpp the skipped counters
 // and the region set; Prop/Tracks.hpp the patches).
-//
-// NOTE: Prop/Raster.hpp defines `TriRange` as std::array<size_t, 2> and Fins.hpp as
-// std::pair<int, int>, both in Slic3r::SupportFins, so one translation unit cannot
-// include both (Fins.hpp's owner has to reconcile them).
 #pragma once
 #include "Math.hpp"
 #include "Overhangs.hpp"

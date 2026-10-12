@@ -13,6 +13,7 @@
 // its recorded verdicts, in call order, checking each call's wall.
 #include "Engine/Cutout.hpp"
 #include "Engine/Draw.hpp"
+#include "Engine/Entry.hpp"
 #include "Engine/Fins/Seating.hpp"
 #include "Engine/Materials.hpp"
 #include "Engine/Overhangs.hpp"
@@ -38,12 +39,6 @@
 using namespace Slic3r::SupportFins;
 using json = nlohmann::json;
 namespace fs = std::filesystem;
-
-// Entry.hpp's (not included: Entry.hpp pulls Fins.hpp, whose TriRange clashes with
-// Prop/Raster.hpp's). Its drawWall forwarder is exercised through Draw's drawWall.
-namespace Slic3r { namespace SupportFins {
-Offset seatSoup(const Soup &input, Soup &pos);
-}}
 
 namespace {
 
@@ -346,6 +341,27 @@ void runFile(const fs::path &f) {
                 eqD(r.stats.height, j["stats"]["height"], "stats.height");
                 eqI(r.stats.tines, j["stats"]["tines"].get<long>(), "stats.tines");
                 eqB(r.stats.partAttached, j["stats"]["partAttached"].get<bool>(), "stats.partAttached");
+            }
+            // ...and through Entry.hpp's forwarder, which must hand back the same
+            EntryOptions eo;
+            eo.material = o.material; eo.tines = o.tines; eo.tineDensity = o.tineDensity;
+            eo.layerHeight = o.layerHeight; eo.plateOnly = o.plateOnly; eo.threshold = o.threshold;
+            eo.cutout = o.cutout;
+            std::string reason;
+            const EntryDrawResult e = drawWall(posed, V3(c["a"]), V3(c["b"]), eo, reason);
+            eqB(e.ok, j["ok"].get<bool>(), "entry ok");
+            if (!j["ok"].get<bool>()) eqS(reason, j["reason"].get<std::string>(), "entry reason");
+            else if (e.ok) {
+                eqI(long(e.triangles.size()), long(j["triangles"].size()), "entry triangles.length");
+                if (e.triangles.size() == j["triangles"].size())
+                    for (size_t i = 0; i < e.triangles.size(); i++) eqD(double(e.triangles[i]), j["triangles"][i], "entry triangles[i]");
+                eqD(e.offset.x, j["offset"]["x"], "entry offset.x");
+                eqD(e.offset.y, j["offset"]["y"], "entry offset.y");
+                eqD(e.offset.z, j["offset"]["z"], "entry offset.z");
+                eqD(e.stats.length, j["stats"]["length"], "entry stats.length");
+                eqD(e.stats.height, j["stats"]["height"], "entry stats.height");
+                eqI(e.stats.tines, j["stats"]["tines"].get<long>(), "entry stats.tines");
+                eqB(e.stats.partAttached, j["stats"]["partAttached"].get<bool>(), "entry stats.partAttached");
             }
         } else {
             fail("unknown call " + fn);

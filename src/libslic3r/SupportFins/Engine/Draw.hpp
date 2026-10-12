@@ -4,9 +4,6 @@
 // soup, seated and analyzed exactly as computeFins does, then one drawnWall).
 //
 // Geometry only. Reuses Prop/'s sweep and its three line-settling passes verbatim.
-//
-// This header deliberately includes neither Fins.hpp nor Prop/Raster.hpp (they both
-// define `TriRange` differently), so Entry.cpp and Prop users can both include it.
 #pragma once
 #include "Math.hpp"
 #include "Overhangs.hpp"
