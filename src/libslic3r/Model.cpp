@@ -1310,6 +1310,7 @@ ModelObject& ModelObject::assign_copy(const ModelObject &rhs)
     this->sla_points_status           = rhs.sla_points_status;
     this->sla_drain_holes             = rhs.sla_drain_holes;
     this->brim_points                 = rhs.brim_points;
+    this->support_fin_options         = rhs.support_fin_options;
     this->layer_config_ranges         = rhs.layer_config_ranges;
     this->layer_height_profile        = rhs.layer_height_profile;
     this->printable                   = rhs.printable;
@@ -1355,6 +1356,7 @@ ModelObject& ModelObject::assign_copy(ModelObject &&rhs)
     this->sla_points_status           = std::move(rhs.sla_points_status);
     this->sla_drain_holes             = std::move(rhs.sla_drain_holes);
     this->brim_points                 = std::move(brim_points);
+    this->support_fin_options         = std::move(rhs.support_fin_options);
     this->layer_config_ranges         = std::move(rhs.layer_config_ranges);
     this->layer_height_profile        = std::move(rhs.layer_height_profile);
     this->printable                   = std::move(rhs.printable);
@@ -1546,6 +1548,11 @@ bool ModelObject::is_mm_painted() const
 bool ModelObject::is_fuzzy_skin_painted() const
 {
     return std::any_of(this->volumes.cbegin(), this->volumes.cend(), [](const ModelVolume *mv) { return mv->is_fuzzy_skin_facets_painted(); });
+}
+
+bool ModelObject::has_support_fins() const
+{
+    return std::any_of(this->volumes.cbegin(), this->volumes.cend(), [](const ModelVolume *mv) { return mv->is_support_fin(); });
 }
 
 void ModelObject::sort_volumes(bool full_sort)

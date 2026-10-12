@@ -17,6 +17,7 @@
 #include "enum_bitmask.hpp"
 #include "TextConfiguration.hpp"
 #include "EmbossShape.hpp"
+#include "SupportFins/SupportFins.hpp"
 //BBS: add bbs 3mf
 #include "Format/bbs_3mf.hpp"
 #include "libslic3r/Format/AssemblyStepsJson.hpp"
@@ -381,6 +382,11 @@ public:
 
     BrimPoints              brim_points;
 
+    // Support Fins: the options the object's fin volumes (ModelVolume::support_fin) were
+    // generated with, kept so the set can be regenerated after a rotation. Unset when the
+    // object has never had fins.
+    std::optional<SupportFinOptions> support_fin_options;
+
     /* This vector accumulates the total translation applied to the object by the
         center_around_origin() method. Callers might want to apply the same translation
         to new volumes before adding them to this object in order to preserve alignment
@@ -423,6 +429,8 @@ public:
     bool                    is_mm_painted() const;
     // Checks if any of object volume is painted using the fuzzy skin painting gizmo.
     bool                    is_fuzzy_skin_painted() const;
+    // Whether any volume of this object is a generated or drawn Support Fin.
+    bool                    has_support_fins() const;
     // This object may have a varying layer height by painting or by a table.
     // Even if true is returned, the layer height profile may be "flat" with no difference to default layering.
     bool                    has_custom_layering() const
@@ -690,7 +698,7 @@ private:
         ar(name, module_name, input_file, instances, volumes, config_wrapper, layer_config_ranges, layer_heigth_profile_wrapper,
             sla_support_points, sla_points_status, sla_drain_holes, printable, origin_translation, brim_points,
             m_bounding_box, m_bounding_box_valid, m_raw_bounding_box, m_raw_bounding_box_valid, m_raw_mesh_bounding_box, m_raw_mesh_bounding_box_valid,
-            cut_connectors, cut_id);
+            cut_connectors, cut_id, support_fin_options);
     }
     template<class Archive> void load(Archive& ar) {
         ar(cereal::base_class<ObjectBase>(this));
@@ -701,7 +709,7 @@ private:
         ar(name, module_name, input_file, instances, volumes, config_wrapper, layer_config_ranges, layer_heigth_profile_wrapper,
             sla_support_points, sla_points_status, sla_drain_holes, printable, origin_translation, brim_points,
             m_bounding_box, m_bounding_box_valid, m_raw_bounding_box, m_raw_bounding_box_valid, m_raw_mesh_bounding_box, m_raw_mesh_bounding_box_valid,
-            cut_connectors, cut_id);
+            cut_connectors, cut_id, support_fin_options);
         std::vector<ObjectID> volume_ids2;
         std::transform(volumes.begin(), volumes.end(), std::back_inserter(volume_ids2), std::mem_fn(&ObjectBase::id));
         if (volume_ids != volume_ids2)
@@ -996,6 +1004,9 @@ public:
     // Is set only when volume is Embossed Shape
     // Contain 2d information about embossed shape to be editabled
     std::optional<EmbossShape> emboss_shape;
+    // Is set only when the volume is a Support Fin piece (generated or drawn); the
+    // volume is otherwise an ordinary MODEL_PART.
+    std::optional<SupportFinInfo> support_fin;
     // A parent object owning this modifier volume.
     ModelObject*        get_object() const { return this->object; }
     ModelVolumeType     type() const { return m_type; }
@@ -1007,6 +1018,7 @@ public:
 	bool                is_support_blocker()    const { return m_type == ModelVolumeType::SUPPORT_BLOCKER; }
 	bool                is_support_modifier()   const { return m_type == ModelVolumeType::SUPPORT_BLOCKER || m_type == ModelVolumeType::SUPPORT_ENFORCER; }
     bool                is_svg() const { return emboss_shape.has_value(); }
+    bool                is_support_fin() const { return support_fin.has_value(); }
     bool                is_the_only_one_part() const; // behave like an object
     t_model_material_id material_id() const { return m_material_id; }
     void                set_material_id(t_model_material_id material_id);
@@ -1283,7 +1295,7 @@ private:
         , fuzzy_skin_facets(other.fuzzy_skin_facets)
         , seam_facets(other.seam_facets)
         , mmu_segmentation_facets(other.mmu_segmentation_facets)
-        , m_text_info(other.m_text_info), emboss_shape(other.emboss_shape)
+        , m_text_info(other.m_text_info), emboss_shape(other.emboss_shape), support_fin(other.support_fin)
         , m_part_guid(other.m_part_guid), m_assembly_src_guid(other.m_assembly_src_guid)
         , m_printable(other.m_printable)
     {
@@ -1312,6 +1324,7 @@ private:
         m_assemble_transformation(other.m_assemble_transformation),
         m_assemble_initialized(other.m_assemble_initialized),
         emboss_shape(other.emboss_shape),
+        support_fin(other.support_fin),
         m_printable(other.m_printable)
     {
 		assert(this->id().valid());
@@ -1379,6 +1392,7 @@ private:
         mesh_changed |= t != mmu_segmentation_facets.timestamp();
         cereal::load_by_value(ar, config);
         cereal::load(ar, emboss_shape);
+        cereal::load(ar, support_fin);
 		assert(m_mesh);
 		if (has_convex_hull) {
 			cereal::load_optional(ar, m_convex_hull);
@@ -1399,6 +1413,7 @@ private:
         cereal::save_by_value(ar, mmu_segmentation_facets);
         cereal::save_by_value(ar, config);
         cereal::save(ar, emboss_shape);
+        cereal::save(ar, support_fin);
 		if (has_convex_hull)
 			cereal::save_optional(ar, m_convex_hull);
 	}

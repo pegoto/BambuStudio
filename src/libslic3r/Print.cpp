@@ -1650,6 +1650,19 @@ StringObjectException Print::validate(StringObjectException *warning, Polygons* 
                 }
             }
 
+            // Support Fins replace supports under the overhangs they serve: doing both prints
+            // supports into the fins. Warn, don't refuse (Support Fins, Decision 2).
+            if (warning && object->config().enable_support && object->model_object()->has_support_fins()) {
+                StringObjectException warningtemp;
+                warningtemp.string     = Slic3r::format(L("Support Fins and supports are both enabled on %1%; the fins replace supports, consider turning supports off"),
+                                                        object->model_object()->name);
+                warningtemp.object     = object;
+                warningtemp.opt_key    = "enable_support";
+                warningtemp.type       = STRING_EXCEPT_NOT_DEFINED;
+                warningtemp.is_warning = true;
+                *warning               = warningtemp;
+            }
+
             double initial_layer_print_height = m_config.initial_layer_print_height.value;
             double first_layer_min_nozzle_diameter;
             if (object->has_raft()) {

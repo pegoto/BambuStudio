@@ -180,6 +180,8 @@ set(SLIC3R_GUI_SOURCES
     GUI/Gizmos/GLGizmoMeasure.hpp
     GUI/Gizmos/GLGizmoBrimEars.cpp
     GUI/Gizmos/GLGizmoBrimEars.hpp
+    GUI/Gizmos/GLGizmoSupportFins.cpp
+    GUI/Gizmos/GLGizmoSupportFins.hpp
     GUI/Gizmos/GLGizmoAssembly.cpp
     GUI/Gizmos/GLGizmoAssembly.hpp
     GUI/Gizmos/GLGizmoSeam.cpp

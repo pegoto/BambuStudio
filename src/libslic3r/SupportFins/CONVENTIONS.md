@@ -61,6 +61,14 @@ file name in the header comment of each unit.
 - String keys built from numbers (`${Math.round(x*1000)},...`) -> integer tuple keys.
   The hash/ordering of the map must not affect results; if it does (iteration), keep
   insertion order explicitly.
+- `Math.hypot` -> `hypot2`/`hypot3` (V8's scaled Kahan algorithm, NOT `std::hypot`,
+  which differs in the last bit on ~40% of inputs). `x.toFixed(n)` rounds ties away
+  from zero on the exact decimal value; printf rounds to even (see Cutout.cpp toFixed9).
+  V8's `Math.asin/acos/atan2/sin/cos/exp/log` are fdlibm; glibc can differ by 1-2 ulp.
+  So far only a debug field (`lean`) is affected; if a decision flips on one of these,
+  port that function from V8's src/base/ieee754.cc instead of tolerating it.
+- No fused multiply-add: the standalone build passes `-ffp-contract=off` and the
+  libslic3r build must too for these sources (aarch64 fuses by default).
 - Floating point: keep the same operations in the same order. Do not "simplify" an
   expression (a*b/c vs a*(b/c) differ in the last bit and tines flip on it, see
   upstream `plugins/shared/ENGINE-SENSITIVITY.md`). No `-ffast-math`.

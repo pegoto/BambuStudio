@@ -252,7 +252,8 @@ function runFrame(name, topo, rot, offset, kept) {
   const env = box(mid, [1, 0, 0], [0, 1, 0], [0, 0, 1], hu, hv, -1, hz);
   scCall(env, 0.45);
   scCall(env, 2.0);
-  // the generation stamp's Int32 guard: a reset, a run straddling 2^31, a negative restart
+  // the generation stamp's Int32 guard: reset past 2e9 (twice), and a stored value past 2^31
+  // whose `| 0` restarts the count negative
   const f0 = sample(1)[0], c0 = centroid(f0), n0 = normal(f0);
   const ref0 = Math.abs(n0[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
   const u0 = unit(cross(n0, ref0)), v0 = cross(n0, u0);

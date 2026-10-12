@@ -3,6 +3,7 @@
 #include "Fins.hpp"
 #include "FinConfig.hpp"
 #include "PropConfig.hpp"
+#include "Cutout.hpp"
 
 namespace Slic3r { namespace SupportFins {
 
@@ -11,8 +12,9 @@ void applyTunables(const Tunables &t) {
     PROP.gap = t.propGap;
     PROP.iface = t.iface;
     if (t.tinesPerWall >= 0) PROP.tinesPerWall = t.tinesPerWall;
-    // PAD.grab / PAD.style / PAD.custom / PERP.gap / CUT.pattern: set by the owners of
-    // those modules once they exist.
+    if (isCutoutPattern(t.cutout)) CUT.pattern = t.cutout;
+    // PAD.grab / PAD.style / PAD.custom / PERP.gap: set by the owners of those modules
+    // once they exist.
 }
 
 Built buildFins(Topology &topo, const AnalyzeResult &result, const Rot &rot, const BuildOpts &opts) {

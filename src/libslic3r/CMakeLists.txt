@@ -353,6 +353,46 @@ set(lisbslic3r_sources
     Support/TreeModelVolumes.cpp
     Support/TreeSupportCommon.hpp
     Support/SupportParameters.hpp
+    # Support Fins (SupportFins/): the host API and the engine port. List every Engine/ file here.
+    SupportFins/SupportFins.hpp
+    SupportFins/SupportFins.cpp
+    SupportFins/Engine/Config.cpp
+    SupportFins/Engine/Cutout.cpp
+    SupportFins/Engine/Cutout.hpp
+    SupportFins/Engine/Entry.cpp
+    SupportFins/Engine/Entry.hpp
+    SupportFins/Engine/FinConfig.hpp
+    SupportFins/Engine/Fins.cpp
+    SupportFins/Engine/Fins.hpp
+    SupportFins/Engine/Fins/Seating.cpp
+    SupportFins/Engine/Fins/Seating.hpp
+    SupportFins/Engine/Inside.cpp
+    SupportFins/Engine/Inside.hpp
+    SupportFins/Engine/Kiss.cpp
+    SupportFins/Engine/Kiss.hpp
+    SupportFins/Engine/Materials.hpp
+    SupportFins/Engine/Math.hpp
+    SupportFins/Engine/Overhangs.cpp
+    SupportFins/Engine/Overhangs.hpp
+    SupportFins/Engine/Pieces.cpp
+    SupportFins/Engine/Pieces.hpp
+    SupportFins/Engine/Planes.cpp
+    SupportFins/Engine/Planes.hpp
+    SupportFins/Engine/Prop/Brace.cpp
+    SupportFins/Engine/Prop/Brace.hpp
+    SupportFins/Engine/Prop/Contact.cpp
+    SupportFins/Engine/Prop/Contact.hpp
+    SupportFins/Engine/Prop/Crest.cpp
+    SupportFins/Engine/Prop/Crest.hpp
+    SupportFins/Engine/Prop/Mold.cpp
+    SupportFins/Engine/Prop/Mold.hpp
+    SupportFins/Engine/Prop/Surface.cpp
+    SupportFins/Engine/Prop/Surface.hpp
+    SupportFins/Engine/Prop/Ties.cpp
+    SupportFins/Engine/Prop/Ties.hpp
+    SupportFins/Engine/PropConfig.hpp
+    SupportFins/Engine/Solids.hpp
+    # end Support Fins
     MinimumSpanningTree.hpp
     MinimumSpanningTree.cpp
     Surface.cpp

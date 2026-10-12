@@ -275,6 +275,12 @@ static constexpr const char* HIT_MESH_ATTR        = "hit_mesh";
 static constexpr const char* HIT_POSITION_ATTR    = "hit_position";
 static constexpr const char* HIT_NORMAL_ATTR      = "hit_normal";
 
+// Support Fins: <support_fin value="SupportFinInfo::to_string()"/> inside a <part>, and
+// <support_fin_options value="SupportFinOptions::to_string()"/> inside an <object>,
+// both in Metadata/model_settings.config.
+static constexpr const char* SUPPORT_FIN_TAG         = "support_fin";
+static constexpr const char* SUPPORT_FIN_OPTIONS_TAG = "support_fin_options";
+
 // BBS: encrypt
 static constexpr const char* RELATIONSHIP_TAG = "Relationship";
 static constexpr const char* PID_ATTR = "pid";
@@ -1021,6 +1027,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 ModelVolumeType part_type;
                 TextInfo text_info;
                 std::optional<EmbossShape>       shape_configuration;
+                std::optional<SupportFinInfo>    support_fin;
                 VolumeMetadata(unsigned int first_triangle_id, unsigned int last_triangle_id, ModelVolumeType type = ModelVolumeType::MODEL_PART)
                     : first_triangle_id(first_triangle_id)
                     , last_triangle_id(last_triangle_id)
@@ -1042,6 +1049,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
             MetadataList metadata;
             VolumeMetadataList volumes;
+            std::optional<SupportFinOptions> support_fin_options;
         };
 
         struct CutObjectInfo
@@ -1476,6 +1484,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
         bool _handle_start_text_info_item(const char **attributes, unsigned int num_attributes);
         bool _handle_end_text_info_item();
+        bool _handle_start_support_fin_item(const char **attributes, unsigned int num_attributes);
+        bool _handle_start_support_fin_options(const char **attributes, unsigned int num_attributes);
 
         // BBS: callbacks to parse the .rels file
         static void XMLCALL _handle_start_relationships_element(void* userData, const char* name, const char** attributes);
@@ -2323,6 +2333,7 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                     else
                         model_object->config.set_deserialize(metadata.key, metadata.value, config_substitutions);
                 }
+                model_object->support_fin_options = obj_metadata->second.support_fin_options;
 
                 // select object's detected volumes
                 volumes_ptr = &obj_metadata->second.volumes;
@@ -3796,6 +3807,10 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
             res = _handle_start_assemble_item(attributes, num_attributes);
         else if (::strcmp(TEXT_INFO_TAG, name) == 0)
             res = _handle_start_text_info_item(attributes, num_attributes);
+        else if (::strcmp(SUPPORT_FIN_TAG, name) == 0)
+            res = _handle_start_support_fin_item(attributes, num_attributes);
+        else if (::strcmp(SUPPORT_FIN_OPTIONS_TAG, name) == 0)
+            res = _handle_start_support_fin_options(attributes, num_attributes);
         else if (::strcmp(OLD_SHAPE_TAG, name) == 0)
             res = _handle_start_shape_configuration(attributes, num_attributes);
         else if (::strcmp(SHAPE_TAG, name) == 0)
@@ -5276,6 +5291,42 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
         return true;
     }
 
+    // Support Fins are optional data: a malformed or misplaced element is logged and
+    // skipped, never a reason to refuse the project.
+    bool _BBS_3MF_Importer::_handle_start_support_fin_item(const char **attributes, unsigned int num_attributes)
+    {
+        IdToMetadataMap::iterator object = m_objects_metadata.find(m_curr_config.object_id);
+        if (object == m_objects_metadata.end() || m_curr_config.volume_id == -1 || size_t(m_curr_config.volume_id) >= object->second.volumes.size()) {
+            BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": support_fin outside of a part, object id " << m_curr_config.object_id << ", ignored";
+            return true;
+        }
+        std::string value = bbs_get_attribute_value_string(attributes, num_attributes, VALUE_ATTR);
+        std::optional<SupportFinInfo> info = SupportFinInfo::from_string(value);
+        if (!info) {
+            BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": can not parse support_fin \"" << value << "\", ignored";
+            return true;
+        }
+        object->second.volumes[m_curr_config.volume_id].support_fin = std::move(info);
+        return true;
+    }
+
+    bool _BBS_3MF_Importer::_handle_start_support_fin_options(const char **attributes, unsigned int num_attributes)
+    {
+        IdToMetadataMap::iterator object = m_objects_metadata.find(m_curr_config.object_id);
+        if (object == m_objects_metadata.end()) {
+            BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": support_fin_options outside of an object, ignored";
+            return true;
+        }
+        std::string value = bbs_get_attribute_value_string(attributes, num_attributes, VALUE_ATTR);
+        std::optional<SupportFinOptions> options = SupportFinOptions::from_string(value);
+        if (!options) {
+            BOOST_LOG_TRIVIAL(warning) << __FUNCTION__ << ": can not parse support_fin_options \"" << value << "\", ignored";
+            return true;
+        }
+        object->second.support_fin_options = std::move(options);
+        return true;
+    }
+
     void XMLCALL _BBS_3MF_Importer::_handle_start_relationships_element(void* userData, const char* name, const char** attributes)
     {
         _BBS_3MF_Importer* importer = (_BBS_3MF_Importer*)userData;
@@ -5564,6 +5615,8 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                 volume->emboss_shape = std::move(es);
             if (!volume_data->text_info.m_text.empty())
                 volume->set_text_info(volume_data->text_info);
+            if (volume_data->support_fin.has_value())
+                volume->support_fin = volume_data->support_fin;
 
             // apply the remaining volume's metadata
             for (const Metadata& metadata : volume_data->metadata) {
@@ -8364,6 +8417,11 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
 
                 stream << "    <" << METADATA_TAG << " " << MESH_STAT_FACE_COUNT << "=\"" << obj_metadata.second.object->facets_count() << "\"/>\n";
 
+                // stores the Support Fins generator options
+                if (obj->support_fin_options.has_value())
+                    stream << "    <" << SUPPORT_FIN_OPTIONS_TAG << " " << VALUE_ATTR << "=\""
+                           << xml_escape_double_quotes_attribute_value(obj->support_fin_options->to_string()) << "\"/>\n";
+
                 for (const ModelVolume* volume : obj_metadata.second.object->volumes) {
                     if (volume != nullptr) {
                         const VolumeToObjectIDMap& objectIDs = obj_metadata.second.volumes_objectID;
@@ -8446,6 +8504,10 @@ void PlateData::parse_filament_info(GCodeProcessorResult *result)
                             const TextInfo &text_info = volume->get_text_info();
                             if (!text_info.m_text.empty())
                                 _add_text_info_to_archive(stream, text_info);
+
+                            if (volume->support_fin.has_value())
+                                stream << "      <" << SUPPORT_FIN_TAG << " " << VALUE_ATTR << "=\""
+                                       << xml_escape_double_quotes_attribute_value(volume->support_fin->to_string()) << "\"/>\n";
 
                             // stores mesh's statistics
                             const RepairedMeshErrors& stats = volume->mesh().stats().repaired_errors;

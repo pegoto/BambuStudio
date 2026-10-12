@@ -38,9 +38,34 @@ inline double js_round(double v) { return std::floor(v + 0.5); }
 /// JS Math.trunc / Math.floor / Math.ceil map to std:: directly.
 /// JS Math.fround: round to float32 and back.
 inline double fround(double v) { return double(float(v)); }
-/// JS Math.hypot for 2 and 3 args.
-inline double hypot2(double a, double b) { return std::hypot(a, b); }
-inline double hypot3(double a, double b, double c) { return std::hypot(a, b, c); }
+/// JS Math.hypot, V8's algorithm (src/builtins/math.tq MathHypot), NOT std::hypot:
+/// scale by the largest magnitude, Kahan-compensated sum of squares, sqrt * max.
+/// std::hypot differs in the last bit on ~40% of inputs, which reorders equal-area
+/// faces on symmetric parts and moves walls. Verified bit-identical to Node on 200k
+/// random inputs by the planes port.
+inline double js_hypot(const double *v, int n) {
+    double max = 0;
+    bool oneNaN = false;
+    for (int i = 0; i < n; i++) {
+        const double a = std::abs(v[i]);
+        if (a == INF) return INF;
+        if (std::isnan(a)) oneNaN = true;
+        else if (a > max) max = a;
+    }
+    if (oneNaN) return std::numeric_limits<double>::quiet_NaN();
+    if (max == 0) return 0;
+    double sum = 0, compensation = 0;
+    for (int i = 0; i < n; i++) {
+        const double x = std::abs(v[i]) / max;
+        const double summand = x * x - compensation;
+        const double preliminary = sum + summand;
+        compensation = (preliminary - sum) - summand;
+        sum = preliminary;
+    }
+    return std::sqrt(sum) * max;
+}
+inline double hypot2(double a, double b) { const double v[2] = {a, b}; return js_hypot(v, 2); }
+inline double hypot3(double a, double b, double c) { const double v[3] = {a, b, c}; return js_hypot(v, 3); }
 /// JS Math.sign
 inline double js_sign(double v) { return v > 0 ? 1.0 : v < 0 ? -1.0 : 0.0; }
 

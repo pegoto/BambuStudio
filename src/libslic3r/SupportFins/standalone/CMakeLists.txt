@@ -20,7 +20,9 @@ get_filename_component(SRC_ROOT "${SF_ROOT}/../.." ABSOLUTE)
 file(GLOB_RECURSE SF_SOURCES CONFIGURE_DEPENDS "${SF_ROOT}/Engine/*.cpp")
 add_library(supportfins_engine STATIC ${SF_SOURCES})
 target_include_directories(supportfins_engine PUBLIC "${SRC_ROOT}/eigen" "${SF_ROOT}")
-target_compile_options(supportfins_engine PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare -Wno-misleading-indentation)
+# -ffp-contract=off: no fused multiply-add. aarch64 (and any -march=native x86) would
+# otherwise fuse a*b+c into one rounding and break bit parity with the JS engine.
+target_compile_options(supportfins_engine PRIVATE -ffp-contract=off -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare -Wno-misleading-indentation)
 if(SF_SANITIZE)
   target_compile_options(supportfins_engine PUBLIC -fsanitize=address,undefined -fno-omit-frame-pointer -g)
   target_link_options(supportfins_engine PUBLIC -fsanitize=address,undefined)
