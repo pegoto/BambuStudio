@@ -1,0 +1,26 @@
+name: Build macOS arm64
+
+# Manual, single-target build for Apple Silicon (same job the full matrix runs for
+# macos-15/arm64), so a feature branch can be compiled and packaged without
+# spending the other eight runners. Artifact: BambuStudio_Mac_arm64_<version>.
+on:
+  workflow_dispatch:
+    inputs:
+      build-deps-only:
+        description: 'Only build dependencies (bypasses caching)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_mac_arm64:
+    name: Build macOS arm64
+    uses: ./.github/workflows/build_check_cache.yml
+    with:
+      os: macos-15
+      arch: arm64
+      build-deps-only: ${{ inputs.build-deps-only || false }}
+    secrets: inherit
