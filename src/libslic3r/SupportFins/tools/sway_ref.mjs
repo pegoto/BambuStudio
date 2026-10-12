@@ -34,6 +34,9 @@ const MODELS = [
   ['bar', '0,0,0'], ['needle', '0,0,0'], ['cylinder', '0,0,0'], ['tube', '0,0,0'],
   ['hexprism', '0,0,0'], ['plus', '0,0,0'], ['lbracket', '0,0,0'],
   ['cube', '0,0,0'], ['cube', '40,0,0'],
+  // poses that reach the rarer refusals: a face starting high (stilt), a short face,
+  // a base spreading under the face, no upright side at all
+  ['lbracket', '0,90,0'], ['bar', '20,0,0'], ['hexprism', '20,0,0'], ['cube', '45,35,0'],
 ];
 
 // --- copied from tools/ref.mjs -------------------------------------------------------
@@ -192,6 +195,24 @@ function runModel(name, poseStr) {
   const clashWall = auto.map((r) => sway.swayClashesWall(r, walls));
   const clashWallEach = auto.map((r) => walls.map((w) => sway.swayClashesWall(r, [w])));
 
+  // swayClashes' level-by-level path: a copy of rib j with its foot parked far away (so
+  // the foot test passes), its levels shifted by (dx, dy) and squashed in z by 0.73 (so
+  // levelAt interpolates between rungs), against rib i. The C++ test builds the same
+  // copy from its own rib j with the same operations.
+  const SHIFTS = [-30, -12, -5, -2, 0, 2, 5, 12, 30];
+  const levelClashes = [];
+  for (let i = 0; i < auto.length; i++) {
+    for (let j = 0; j < auto.length; j++) {
+      for (const dx of SHIFTS) for (const dy of SHIFTS) {
+        const r = auto[j];
+        const copy = { foot: [[1e4, 1e4, 0], [1e4 + 1, 1e4, 0]], halfW: r.halfW, th: r.th, height: r.height * 0.73,
+                       levels: r.levels.map((L) => ({ z: L.z * 0.73, a: [L.a[0] + dx, L.a[1] + dy, L.a[2]],
+                                                     b: [L.b[0] + dx, L.b[1] + dy, L.b[2]] })) };
+        levelClashes.push(sway.swayClashes(auto[i], [copy]) ? 1 : 0);
+      }
+    }
+  }
+
   // faceIsUpright on every face
   const upright = [];
   for (let f = 0; f < topo.nFaces; f++) upright.push(sway.faceIsUpright(topo, rot, f) ? 1 : 0);
@@ -207,6 +228,15 @@ function runModel(name, poseStr) {
     }
     return c.map((v) => v / 3);
   };
+  // across the first 8 patches, 5 spots each, with and without allowStilt forced off
+  for (const p of patches.slice(0, 8)) {
+    for (let k = 0; k <= 4; k++) {
+      const u = p.u0 + ((p.u1 - p.u0) * k) / 4;
+      const point = [p.u.x * u + p.n.x * p.d, p.u.y * u + p.n.y * p.d, 0];
+      picks.push({ face: p.faces[0], point, avoid: 'none' });
+      picks.push({ face: p.faces[0], point, avoid: 'none', allowStilt: false });
+    }
+  }
   for (const p of patches.slice(0, 4)) {
     const fs = [p.faces[0], p.faces[p.faces.length - 1]];
     for (const f of fs) {
@@ -247,7 +277,7 @@ function runModel(name, poseStr) {
     offset: result.offset,
     bearings: patches.map((p) => Math.atan2(p.n.y, p.n.x)),
     walls,
-    runs, clashes, clashAll, clashWall, clashWallEach, upright, atFace,
+    runs, clashes, levelClashes, shifts: SHIFTS, clashAll, clashWall, clashWallEach, upright, atFace,
   };
 }
 

@@ -72,13 +72,13 @@ Reach reachOf(const std::vector<Vec3d> &tops, double R) {
 std::vector<uint8_t> classify(const Topology &topo, const AnalyzeResult &res, const Rot &rot) {
     const Soup &pos = topo.pos;
     const int nFaces = topo.nFaces;
-    const auto &adjA = topo.adjA, &adjB = topo.adjB, &area = topo.area;
-    const auto &nrm = topo.nrm;
+    const std::vector<int> &adjA = topo.adjA, &adjB = topo.adjB;
+    const std::vector<double> &area = topo.area, &nrm = topo.nrm;
     const Offset off = res.offset;
     std::vector<uint8_t> cls(size_t(nFaces), 0);
     auto seatV = [&](size_t o) { return seat(rot, off, pos[o], pos[o + 1], pos[o + 2]); };
     // connected overhang patches, union-find over shared edges
-    std::vector<int32_t> parent(size_t(nFaces));
+    std::vector<int32_t> parent(static_cast<size_t>(nFaces));
     for (int i = 0; i < nFaces; i++) parent[size_t(i)] = i;
     auto find = [&](int32_t i) {
         while (parent[size_t(i)] != i) { const int32_t g = parent[size_t(parent[size_t(i)])]; parent[size_t(i)] = g; i = g; }

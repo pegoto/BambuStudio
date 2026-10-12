@@ -353,45 +353,10 @@ set(lisbslic3r_sources
     Support/TreeModelVolumes.cpp
     Support/TreeSupportCommon.hpp
     Support/SupportParameters.hpp
-    # Support Fins (SupportFins/): the host API and the engine port. List every Engine/ file here.
+    # Support Fins (SupportFins/): the host API and the engine port. The engine files are
+    # globbed (SupportFins/Engine/**), see the file(GLOB_RECURSE) above the add_library.
     SupportFins/SupportFins.hpp
     SupportFins/SupportFins.cpp
-    SupportFins/Engine/Config.cpp
-    SupportFins/Engine/Cutout.cpp
-    SupportFins/Engine/Cutout.hpp
-    SupportFins/Engine/Entry.cpp
-    SupportFins/Engine/Entry.hpp
-    SupportFins/Engine/FinConfig.hpp
-    SupportFins/Engine/Fins.cpp
-    SupportFins/Engine/Fins.hpp
-    SupportFins/Engine/Fins/Seating.cpp
-    SupportFins/Engine/Fins/Seating.hpp
-    SupportFins/Engine/Inside.cpp
-    SupportFins/Engine/Inside.hpp
-    SupportFins/Engine/Kiss.cpp
-    SupportFins/Engine/Kiss.hpp
-    SupportFins/Engine/Materials.hpp
-    SupportFins/Engine/Math.hpp
-    SupportFins/Engine/Overhangs.cpp
-    SupportFins/Engine/Overhangs.hpp
-    SupportFins/Engine/Pieces.cpp
-    SupportFins/Engine/Pieces.hpp
-    SupportFins/Engine/Planes.cpp
-    SupportFins/Engine/Planes.hpp
-    SupportFins/Engine/Prop/Brace.cpp
-    SupportFins/Engine/Prop/Brace.hpp
-    SupportFins/Engine/Prop/Contact.cpp
-    SupportFins/Engine/Prop/Contact.hpp
-    SupportFins/Engine/Prop/Crest.cpp
-    SupportFins/Engine/Prop/Crest.hpp
-    SupportFins/Engine/Prop/Mold.cpp
-    SupportFins/Engine/Prop/Mold.hpp
-    SupportFins/Engine/Prop/Surface.cpp
-    SupportFins/Engine/Prop/Surface.hpp
-    SupportFins/Engine/Prop/Ties.cpp
-    SupportFins/Engine/Prop/Ties.hpp
-    SupportFins/Engine/PropConfig.hpp
-    SupportFins/Engine/Solids.hpp
     # end Support Fins
     MinimumSpanningTree.hpp
     MinimumSpanningTree.cpp
@@ -555,6 +520,21 @@ if (APPLE)
             Format/ModelIO.hpp
             Format/ModelIO.mm
         )
+endif ()
+
+# Support Fins engine: one JS module = one C++ unit, added by the port as it grows.
+# No fused multiply-add on these sources: the port is bit-for-bit against the JS
+# engine and aarch64 (Apple Silicon) fuses a*b+c by default.
+file(GLOB_RECURSE SUPPORTFINS_ENGINE_SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_CURRENT_SOURCE_DIR}/SupportFins/Engine/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SupportFins/Engine/*.hpp)
+list(APPEND lisbslic3r_sources ${SUPPORTFINS_ENGINE_SOURCES})
+if (NOT MSVC)
+    set_source_files_properties(${SUPPORTFINS_ENGINE_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/SupportFins/SupportFins.cpp
+        PROPERTIES COMPILE_OPTIONS "-ffp-contract=off")
+else ()
+    set_source_files_properties(${SUPPORTFINS_ENGINE_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/SupportFins/SupportFins.cpp
+        PROPERTIES COMPILE_OPTIONS "/fp:precise")
 endif ()
 
 add_library(libslic3r STATIC ${lisbslic3r_sources}
