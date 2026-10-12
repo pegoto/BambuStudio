@@ -90,6 +90,76 @@ const SCENES = [];
 for (const m of MODELS) for (const r of ['0,0,0', '40,0,0']) SCENES.push([m, r]);
 SCENES.push(['cube', '20,0,0'], ['cube', '30,0,0'], ['lbracket', '35,0,0'], ['torus', '30,0,0'],
             ['portal', '0,60,0'], ['portal', '0,35,0'], ['ushape', '0,60,0'], ['arch', '5,0,0']);
+// ...and, beyond the golden set, parts that reach the paths it does not: a bore (inBore),
+// fixtures and coupons, and tools/tracks_ref.mjs's synthetic nets and small tubes
+// (lattice struts in the raster slot, the small-tube rivalry), pre-posed.
+for (const [m, f] of [['bore-coupon', 'prototype/calibration/bore/print/bore-coupon.stl'],
+                      ['bowl', 'tests/fixtures/bowl.stl'], ['dome_ceiling', 'tests/fixtures/dome_ceiling.stl'],
+                      ['torus_flat', 'tests/fixtures/torus_flat.stl'], ['angle-coupon', 'web/calibration/angle-coupon.stl'],
+                      ['short-coupon', 'prototype/calibration/short/print/short-coupon.stl'],
+                      ['lip-coupon', 'prototype/calibration/lip/print/lip-coupon.stl'],
+                      ['span-coupon', 'prototype/calibration/span/print/span-coupon.stl']]) {
+  SCENES.push([m, '0,0,0', f]);
+}
+SCENES.push(['bore-coupon', '40,0,0', 'prototype/calibration/bore/print/bore-coupon.stl']);
+
+// ---- synthetic parts (tools/tracks_ref.mjs: tests/lattice.test.js, small_tubes.test.js) --
+function voxelPos(filled, nx, ny, nz) {
+  const V = 2;
+  const at = (i, j, k) => i >= 0 && j >= 0 && k >= 0 && i < nx && j < ny && k < nz && filled(i, j, k);
+  const P = (i, j, k) => [i * V, j * V, k * V], t = [];
+  const q = (a, b, c, d) => t.push(a, b, c, a, c, d);
+  for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) for (let k = 0; k < nz; k++) {
+    if (!at(i, j, k)) continue;
+    if (!at(i, j, k - 1)) q(P(i, j, k), P(i, j + 1, k), P(i + 1, j + 1, k), P(i + 1, j, k));
+    if (!at(i, j, k + 1)) q(P(i, j, k + 1), P(i + 1, j, k + 1), P(i + 1, j + 1, k + 1), P(i, j + 1, k + 1));
+    if (!at(i - 1, j, k)) q(P(i, j, k), P(i, j, k + 1), P(i, j + 1, k + 1), P(i, j + 1, k));
+    if (!at(i + 1, j, k)) q(P(i + 1, j, k), P(i + 1, j + 1, k), P(i + 1, j + 1, k + 1), P(i + 1, j, k + 1));
+    if (!at(i, j - 1, k)) q(P(i, j, k), P(i + 1, j, k), P(i + 1, j, k + 1), P(i, j, k + 1));
+    if (!at(i, j + 1, k)) q(P(i, j + 1, k), P(i, j + 1, k + 1), P(i + 1, j + 1, k + 1), P(i + 1, j + 1, k));
+  }
+  const pos = new Float32Array(t.length * 3);
+  t.forEach((p, n) => pos.set(p, n * 3));
+  return Float64Array.from(pos);
+}
+const netPos = () => {
+  const bar = (u) => u % 10 < 2;
+  return voxelPos((i, j, k) =>
+    (k >= 12 && k < 14 && (bar(i) || bar(j))) ||
+    (k < 12 && bar(i) && bar(j) && (i < 2 || i >= 30) && (j < 2 || j >= 30)), 32, 32, 14);
+};
+const quad = (a, b, c, d) => [a, b, c, a, c, d];
+function block(x0, x1, y0, y1, z0, z1) {
+  const v = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
+             [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
+  return [...quad(v[0], v[3], v[2], v[1]), ...quad(v[4], v[5], v[6], v[7]), ...quad(v[0], v[1], v[5], v[4]),
+          ...quad(v[2], v[3], v[7], v[6]), ...quad(v[1], v[2], v[6], v[5]), ...quad(v[0], v[4], v[7], v[3])];
+}
+function cylinderY(cx, cz, r, y0, y1, n = 48) {
+  const ring = (y) => Array.from({ length: n }, (_, i) => {
+    const a = (2 * Math.PI * i) / n;
+    return [cx + r * Math.cos(a), y, cz + r * Math.sin(a)];
+  });
+  const A = ring(y0), B = ring(y1), t = [];
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    t.push(A[i], B[j], A[j], A[i], B[i], B[j]);
+    t.push([cx, y0, cz], A[i], A[j]);
+    t.push([cx, y1, cz], B[j], B[i]);
+  }
+  return t;
+}
+const f32 = (tris) => Float64Array.from(Float32Array.from(tris.flat()));
+const SYNTH = {
+  net: netPos,
+  peg: () => f32([...block(-15, 15, -10, 10, 0, 24), ...cylinderY(0, 14, 2.5, 9, 18)]),
+  fatpeg: () => f32([...block(-25, 25, -10, 10, 0, 60), ...cylinderY(0, 30, 8, 9, 23)]),
+  pegs: () => f32([...block(-25, 25, -10, 10, 0, 60), ...block(-25, -5, -30, -10, 40, 44),
+                   ...cylinderY(0, 30, 8, 9, 23), ...cylinderY(15, 12, 2.5, 9, 18),
+                   ...block(5, 25, -10, 2, 50, 53).map(([x, y, z]) => [x, y - 22, z])]),
+};
+SCENES.push(['net', '20,0,0', SYNTH.net], ['net', '0,0,0', SYNTH.net], ['peg', '0,0,0', SYNTH.peg],
+            ['fatpeg', '0,0,0', SYNTH.fatpeg], ['pegs', '0,0,0', SYNTH.pegs], ['pegs', '10,0,0', SYNTH.pegs]);
 
 // ---- configs -----------------------------------------------------------------------
 // mode 'prop': buildFinsCore's prop branch hands buildProps the whole opts.
@@ -104,6 +174,9 @@ const CFGS = [
   { material: 'pla', iface: false, cutout: 'none', mode: 'prop', opts: { tines: true, coverage: 0, raster: false, layerHeight: 0.12 }, short: true },
   { material: 'petg', iface: 'all', cutout: 'none', mode: 'prop', opts: { tines: true, plateOnly: true, coverage: 1, tineDensity: 1, layerHeight: 0.12 }, capture: true },
   { material: 'pla', iface: 'flat', cutout: 'diamond', mode: 'auto', opts: { tines: true, coverage: 0.5, raster: false, layerHeight: 0.2 } },
+  // a stand-in veto (refuses every raster wall whose line has an odd station count), so the
+  // replayed veto also says yes; capture on, so the kept slices are re-gathered around it
+  { material: 'pla', iface: false, cutout: 'none', mode: 'auto', stubVeto: true, opts: { tines: true, coverage: 1, layerHeight: 0.2 }, capture: true },
 ];
 const DRAW_OPTS = [
   {},
@@ -145,11 +218,12 @@ const resultOf = (r) => ({
 });
 
 let total = 0;
-for (const [model, rotStr] of SCENES) {
-  const name = `${model}-${rotStr.replace(/,/g, '_')}`;
+for (const [model, rotStr, src] of SCENES) {
+  const name = `${typeof src === 'function' ? 'syn_' : ''}${model}-${rotStr.replace(/,/g, '_')}`;
   if (filter && !name.includes(filter)) continue;
   const t0 = performance.now();
-  const raw = readSTL(path.join(SF, 'prototype/stress/models', `${model}.stl`));
+  const raw = typeof src === 'function' ? src()
+    : readSTL(path.join(SF, src ?? path.join('prototype/stress/models', `${model}.stl`)));
   const pose = sitePose(rotStr.split(',').map(Number));
   const posed = new Float64Array(raw.length);
   for (let i = 0; i < raw.length; i += 3) {
@@ -215,7 +289,7 @@ for (const [model, rotStr] of SCENES) {
       const wedgeable = findWallPatches(topo, rot, off).filter((p) =>
         p.n.z < -0.05 && p.area >= PERP.minArea && (p.u1 - p.u0) >= PERP.minWidth);
       const wedgeOpts = { tines: withTines, pitch: coverPitch(coverage), tineDensity: cfg.opts.tineDensity };
-      const real = wedgeVeto(wedgeable, topo, rot, off, wedgeOpts);
+      const real = cfg.stubVeto ? (q) => (q.line?.length ?? 0) % 2 === 1 : wedgeVeto(wedgeable, topo, rot, off, wedgeOpts);
       veto = [];
       opts.rasterVeto = (q, normalProps) => {
         const r = real(q, normalProps);
