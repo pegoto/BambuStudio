@@ -1,4 +1,5 @@
 #include "Overhangs.hpp"
+#include "Ieee754.hpp"
 #include <algorithm>
 #include <unordered_map>
 
@@ -90,7 +91,7 @@ AnalyzeResult analyze(Topology &topo, double thresholdDeg, const Rot &rot) {
     const int nFaces = topo.nFaces;
     const auto &nrm = topo.nrm;
     const auto &area = topo.area;
-    const double cut = -(std::cos((thresholdDeg * M_PI) / 180) + ANGLE_EPS);
+    const double cut = -(js_cos((thresholdDeg * M_PI) / 180) + ANGLE_EPS);
 
     auto &zr = topo._zr;
     double minX = INF, maxX = -INF, minY = INF, maxY = -INF, minZ = INF, maxZ = -INF;

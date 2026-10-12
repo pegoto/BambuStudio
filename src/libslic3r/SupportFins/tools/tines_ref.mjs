@@ -64,6 +64,12 @@ const SCENES = [
   ['cube', '40,0,0'], ['cube', '20,0,0'], ['cube', '30,0,0'], ['lbracket', '35,0,0'], ['torus', '30,0,0'],
   ['staircase', '40,0,0'], ['sphere', '0,0,0'], ['tube', '40,0,0'], ['cylinder', '40,0,0'], ['coin', '40,0,0'],
   ['ramp', '40,0,0'], ['plus', '40,0,0'], ['needle', '40,0,0'], ['lowledge', '40,0,0'],
+  // the other call shapes: walls on the part (prop.js part-attached: a floor under the
+  // overhang)   // (portal / ushape on their side: a flat ceiling, no bite; tilted 60: tines), squat
+  // walls (brim minTop; they sit under near-level faces, so no tine lands -- see the
+  // `squat` replay below), wedges (the six-argument call)
+  ['portal', '0,60,0'], ['ushape', '0,60,0'], ['portal', '0,90,0'], ['lowledge', '0,0,0'],
+  ['portal', '0,35,0'], ['arch', '5,0,0'],
 ];
 // pipeline option sets for the capture: [options, extra tunables]
 const VARIANTS = [
@@ -71,6 +77,7 @@ const VARIANTS = [
   [{ tineDensity: 1, layerHeight: 0.12 }, { iface: 'all' }],
   [{ tineDensity: 0.5, layerHeight: 0.28 }, { tinesPerWall: 5 }],
   [{ tineDensity: 1, material: 'petg' }, {}],
+  [{ mode: 'full', tineDensity: 0.5 }, {}],            // + fins/fill.js -> draw.js drawnWall
 ];
 
 // --- copied from tools/ref.mjs -------------------------------------------------------
@@ -257,20 +264,24 @@ for (const [model, rotStr] of SCENES) {
     resetProp();
     PROP.gap = c.prop.gap;
     const dflt = drive(c.line, topo, IDENTITY3, off, { argc: 6 });
+    // the squat-wall call shape (prop.js / draw.js: minTop = PROP.squatBrimH, no body)
+    const squat = drive(c.line, topo, IDENTITY3, off,
+                        { stepArg: tineStepFor(0), minTop: PROP.squatBrimH, tineH: 0.2, body: null, grip: true, argc: 11 });
     const lineZ = c.line.map(toZ);
     const rotated = drive(lineZ, topo, rotZ, offZ,
                           { stepArg: tineStepFor(1), minTop: c.minTop, tineH: 0.2, body: c.body ?? null, grip: true, argc: 11 });
     resetProp();
-    stats.runs += 2;
+    stats.runs += 3;
     walls.push({
       src: c.src, gap: c.prop.gap, line: numDeep(c.line), minTop: und(c.minTop), body: und(c.body ?? null),
       runs, dflt: { n: dflt.n, tris: dflt.tris, caps: dflt.caps },
+      squat: { n: squat.n, tris: squat.tris, grip: squat.grip, caps: squat.caps },
       rotated: { line: numDeep(lineZ), n: rotated.n, tris: rotated.tris, grip: rotated.grip, caps: rotated.caps },
     });
   }
   stats.walls += walls.length;
 
-  const file = path.join(outDir, `${model}-x${rotStr.split(',')[0]}.json`);
+  const file = path.join(outDir, `${model}-${rotStr.replace(/,/g, '_')}.json`);
   writeFileSync(file, JSON.stringify({
     model, rot: rotStr, soup: Array.from(posed).map(num),
     offset: { x: num(off.x), y: num(off.y), z: num(off.z) },
@@ -281,7 +292,7 @@ for (const [model, rotStr] of SCENES) {
   for (const c of calls) srcs[c.src] = (srcs[c.src] || 0) + 1;
   console.log(`${model} ${rotStr}: faces=${topo.nFaces} calls=${calls.length} (${calls.reduce((s, c) => s + c.n, 0)} tines) ` +
               `walls=${walls.length} replay tines=${walls.reduce((s, w) => s + w.runs.reduce((t, r) => t + r.n, 0), 0)} ` +
-              `rotated tines=${walls.reduce((s, w) => s + w.rotated.n, 0)} ${JSON.stringify(srcs)}`);
+              `rotated tines=${walls.reduce((s, w) => s + w.rotated.n, 0)} squat tines=${walls.reduce((s, w) => s + w.squat.n, 0)} ${JSON.stringify(srcs)}`);
 }
 
 // ---- 3. tineStepFor

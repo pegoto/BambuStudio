@@ -1,13 +1,14 @@
 // Port of web/prop/ties.js. See Ties.hpp.
 #include "Ties.hpp"
 #include "../Solids.hpp"
+#include "../Ieee754.hpp"
 #include <array>
 #include <cmath>
 #include <vector>
 
 namespace Slic3r { namespace SupportFins {
 
-TieConfig::TieConfig() : slope(std::tan((55 * M_PI) / 180)) {}
+TieConfig::TieConfig() : slope(js_tan((55 * M_PI) / 180)) {}
 thread_local TieConfig TIE;
 
 namespace {

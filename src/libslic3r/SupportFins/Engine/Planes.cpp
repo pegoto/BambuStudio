@@ -1,5 +1,6 @@
 // Port of web/planes.js -- see Planes.hpp.
 #include "Planes.hpp"
+#include "Ieee754.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -114,7 +115,7 @@ std::optional<WallPatch> fitPatch(const Topology &topo, FaceGroup &g, const std:
     p.t = {tx, ty, tz};
     p.h = h; p.d = d;
     p.u0 = u0; p.u1 = u1; p.t0 = t0; p.t1 = t1; p.z0 = z0; p.z1 = z1;
-    p.lean = std::abs(std::asin(nz) * 180 / M_PI);
+    p.lean = std::abs(js_asin(nz) * 180 / M_PI);
     p.flatness = std::max(devOut, -devIn);   // never NaN here, so std::max == Math.max
     p.tris = std::move(tris);
     return p;
@@ -129,8 +130,8 @@ std::vector<WallPatch> findWallPatches(const Topology &topo, const Rot &rot, con
     const std::vector<double> &area = topo.area;
     // A hair of slack past the exact sine: a cube on its edge (45 degrees) lands on
     // sin(45) to the last float bit, so a bare `<=` let winding round-off decide.
-    const double leanCut = std::sin((MAX_LEAN_DEG * M_PI) / 180) + 1e-6;
-    const double agreeCut = std::cos((NORMAL_AGREE_DEG * M_PI) / 180);
+    const double leanCut = js_sin((MAX_LEAN_DEG * M_PI) / 180) + 1e-6;
+    const double agreeCut = js_cos((NORMAL_AGREE_DEG * M_PI) / 180);
 
     // rotated face normals, kept because both the grouping test and the plane fit
     // need them and they are not worth recomputing per edge

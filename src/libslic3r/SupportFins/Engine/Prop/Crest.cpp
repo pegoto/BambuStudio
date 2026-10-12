@@ -1,5 +1,6 @@
 // Port of web/prop/crest.js. See Crest.hpp.
 #include "Crest.hpp"
+#include "../Ieee754.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -33,7 +34,7 @@ bool flatAt(const Vec3d &p) {
     }
     // the face the wall stands under: down-facing, at the contact
     return have && std::abs(best[0] - p[2]) < 0.5
-        && -best[1] >= std::cos((PROP.ifaceFlatDeg * M_PI) / 180);
+        && -best[1] >= js_cos((PROP.ifaceFlatDeg * M_PI) / 180);
 }
 } // namespace
 

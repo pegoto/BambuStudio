@@ -3,6 +3,7 @@
 #include "Inside.hpp"
 #include "Kiss.hpp"
 #include "Solids.hpp"
+#include "Ieee754.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -40,7 +41,7 @@ std::string toFixed0(double x) {
     return buf;
 }
 
-double leanCut() { return std::sin((SWAY.maxLeanDeg * M_PI) / 180); }
+double leanCut() { return js_sin((SWAY.maxLeanDeg * M_PI) / 180); }
 
 /// settings(opts): the caller's options resolved against the defaults, clamped to
 /// what prints.
@@ -519,14 +520,11 @@ SwayBraces buildSwayBraces(const Topology &topo, const AnalyzeResult &result, co
     struct Cand { const WallPatch *p; double score, bearing; };
     const std::vector<WallPatch> patches = findWallPatches(topo, rot, result.offset);
     std::vector<Cand> cands;
-    // bearing: glibc atan2 vs V8's fdlibm differ by 1 ulp on some inputs (test_sway
-    // counts them). It only feeds the angGap < sep test below, which no 1-ulp change
-    // has flipped on the stress models; port ieee754::atan2 if one ever does.
     for (const WallPatch &p : patches) {
         if (std::abs(p.n.z) <= cut
             && p.z1 - jsMax(0, p.z0) >= SWAY.minFaceH
             && p.z1 >= SWAY.minTopFrac * partTop)
-            cands.push_back({&p, (p.z1 - jsMax(0, p.z0)) * (p.u1 - p.u0), std::atan2(p.n.y, p.n.x)});
+            cands.push_back({&p, (p.z1 - jsMax(0, p.z0)) * (p.u1 - p.u0), js_atan2(p.n.y, p.n.x)});
     }
     std::stable_sort(cands.begin(), cands.end(), [](const Cand &a, const Cand &b) { return b.score - a.score < 0; });
     if (cands.empty()) return none("no upright side is tall and flat enough to brace in this pose");
