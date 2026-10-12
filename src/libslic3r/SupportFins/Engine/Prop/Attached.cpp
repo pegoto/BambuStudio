@@ -115,7 +115,7 @@ PartAttached buildPartAttached(const ContactLine &line, const SurfTris &partTris
             if (it == n.end()) n.emplace_back(w, 1);
             else it->second++;
         }
-        std::stable_sort(n.begin(), n.end(), [](const auto &a, const auto &b) { return b.second - a.second > 0; });
+        std::stable_sort(n.begin(), n.end(), [](const auto &a, const auto &b) { return b.second - a.second < 0; });
         PartAttached r;
         r.floored = why.size() * 2 >= floor.size() && !n.empty() ? n.front().first : std::string("stub");
         return r;
