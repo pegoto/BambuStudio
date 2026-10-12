@@ -163,32 +163,78 @@ function resultOf(r, srcs = null) {
 
 // ---- configs -------------------------------------------------------------------------
 // coverage -> rowSpan (coverRowSpan); tines; layerHeight (crestPart and the tine height);
-// veto: fins.js's wedgeVeto as opts.rasterVeto; cap: globalThis.__TINECAP on (with two
+// veto: 'wedge' = fins.js's wedgeVeto as opts.rasterVeto (auto mode), 'odd' = a stand-in
+// that vetoes every odd-id raster wall (wedgeVeto never fires on these scenes); cap: globalThis.__TINECAP on (with two
 // earlier entries in it, so capFrom = 2).
 const CFGS = [
   { prop: {}, coverage: 0.5, tines: false, layerHeight: null, veto: false, cap: false },
-  { prop: { iface: 'all' }, coverage: 0, tines: true, layerHeight: null, veto: true, cap: true },
-  { prop: { gap: 0.3, footGap: 0 }, coverage: 1, tines: true, layerHeight: 0.16, veto: true, cap: true },
+  { prop: { iface: 'all' }, coverage: 0, tines: true, layerHeight: null, veto: 'wedge', cap: true },
+  { prop: { gap: 0.3, footGap: 0 }, coverage: 1, tines: true, layerHeight: 0.16, veto: 'wedge', cap: true },
   { prop: { gap: 0.3, iface: 'all' }, coverage: 0.5, tines: true, layerHeight: 0.12, veto: false, cap: true },
-  { prop: { footGap: 0 }, coverage: 1, tines: false, layerHeight: null, veto: false, cap: false },
-  { prop: { iface: 'all', footGap: 0, gap: 0.3 }, coverage: 0, tines: false, layerHeight: null, veto: true, cap: false },
+  { prop: { footGap: 0 }, coverage: 1, tines: true, layerHeight: null, veto: 'odd', cap: true },
+  { prop: { iface: 'all', footGap: 0, gap: 0.3 }, coverage: 0, tines: false, layerHeight: null, veto: 'wedge', cap: false },
 ];
 const CAP0 = [{ x: 1, y: 2, z: 3, biteX: 1, biteY: 0 }, { x: -1, y: 0.5, z: 0.25, biteX: 0, biteY: -1 }];
 
+// None of the stress scenes the port has used so far puts part under an overhang at
+// these poses (buildPartAttached declines on every line), so part-attached territory
+// gets its own: stress models posed with a floor under the overhang (the inside of a
+// lying torus / tube, a portal on its side, ...) and generated tunnels (syn:*) -- a
+// narrow one whose walls read inBore, a wider one, and a low one that floors 'stub'.
 const SCENES = [
   ['cube', '40,0,0'], ['cube', '20,0,0'], ['lbracket', '35,0,0'], ['torus', '30,0,0'], ['staircase', '40,0,0'],
   ['sphere', '0,0,0'], ['tube', '40,0,0'], ['cylinder', '40,0,0'], ['plate', '40,0,0'], ['ramp', '40,0,0'],
   ['lowledge', '0,0,0'], ['lowledge', '40,0,0'], ['coin', '40,0,0'], ['plus', '40,0,0'], ['tshape', '40,0,0'],
   ['tshape', '60,0,0'], ['portal', '40,0,0'], ['ushape', '40,0,0'], ['arch', '40,0,0'],
+  ['torus', '90,0,0'], ['tube', '90,0,0'], ['tube', '75,0,0'], ['portal', '90,0,0'], ['portal', '60,0,0'],
+  ['cylinder', '90,0,0'], ['ushape', '0,90,0'],
+  ['syn:tunnel6', '0,0,0'], ['syn:tunnel6', '0,0,35'], ['syn:tunnel10', '10,0,0'], ['syn:tunnel10', '0,0,0'],
+  ['syn:lowslot', '0,0,0'], ['syn:midslot', '0,0,0'], ['syn:slit', '0,0,0'], ['syn:slit', '0,0,20'],
 ];
+
+// A W x D x H box with a tunnel x in [a, b], z in [c, d] through it along y: closed,
+// outward-facing, no T-junctions (each holed face is four trapezoids).
+function tunnelBox(W, D, H, a, b, c, d) {
+  const out = [];
+  const tri = (p, q, r, n) => {
+    const ux = q[0] - p[0], uy = q[1] - p[1], uz = q[2] - p[2], vx = r[0] - p[0], vy = r[1] - p[1], vz = r[2] - p[2];
+    const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+    if (cx * n[0] + cy * n[1] + cz * n[2] < 0) [q, r] = [r, q];
+    out.push(...p, ...q, ...r);
+  };
+  const quad = (p, q, r, s, n) => { tri(p, q, r, n); tri(p, r, s, n); };
+  quad([0, 0, 0], [W, 0, 0], [W, D, 0], [0, D, 0], [0, 0, -1]);
+  quad([0, 0, H], [W, 0, H], [W, D, H], [0, D, H], [0, 0, 1]);
+  quad([0, 0, 0], [0, D, 0], [0, D, H], [0, 0, H], [-1, 0, 0]);
+  quad([W, 0, 0], [W, D, 0], [W, D, H], [W, 0, H], [1, 0, 0]);
+  for (const [y, ny] of [[0, -1], [D, 1]]) {
+    const n = [0, ny, 0], P = (x, z) => [x, y, z];
+    quad(P(0, 0), P(W, 0), P(b, c), P(a, c), n);
+    quad(P(W, 0), P(W, H), P(b, d), P(b, c), n);
+    quad(P(W, H), P(0, H), P(a, d), P(b, d), n);
+    quad(P(0, H), P(0, 0), P(a, c), P(a, d), n);
+  }
+  quad([a, 0, d], [b, 0, d], [b, D, d], [a, D, d], [0, 0, -1]);   // the ceiling: the overhang
+  quad([a, 0, c], [b, 0, c], [b, D, c], [a, D, c], [0, 0, 1]);    // the floor under it
+  quad([a, 0, c], [a, D, c], [a, D, d], [a, 0, d], [1, 0, 0]);
+  quad([b, 0, c], [b, D, c], [b, D, d], [b, 0, d], [-1, 0, 0]);
+  return Float64Array.from(out);
+}
+const SYN = {
+  tunnel6: () => tunnelBox(30, 40, 20, 12, 18, 4, 10),
+  tunnel10: () => tunnelBox(36, 30, 24, 8, 26, 3, 13),
+  lowslot: () => tunnelBox(40, 30, 12, 6, 34, 2, 3.4),
+  slit: () => tunnelBox(30, 40, 20, 14.3, 15.7, 4, 10),
+  midslot: () => tunnelBox(40, 30, 12, 6, 34, 2, 4.5),
+};
 const only = process.env.SCENE ? process.env.SCENE.split(';') : null;
 const tot = { attached: 0, ok: 0, floored: {}, none: 0, inBore: 0, rasterTracks: 0, swaps: 0, races: 0, raced: 0, vetoed: 0 };
 
 for (const [model, rotStr] of SCENES) {
-  const name = `${model}-${rotStr.replace(/,/g, '_')}`;
+  const name = `${model.replace('syn:', 'syn_')}-${rotStr.replace(/,/g, '_')}`;
   if (only && !only.includes(name)) continue;
   const t0 = Date.now();
-  const raw = readSTL(path.join(SF, 'prototype/stress/models', `${model}.stl`));
+  const raw = model.startsWith('syn:') ? SYN[model.slice(4)]() : readSTL(path.join(SF, 'prototype/stress/models', `${model}.stl`));
   const pose = sitePose(rotStr.split(',').map(Number));
   const posed = new Float64Array(raw.length);
   for (let i = 0; i < raw.length; i += 3) {
@@ -331,7 +377,8 @@ for (const [model, rotStr] of SCENES) {
     if (cfg.veto) {
       const wedgeable = findWallPatches(topo, rot, off).filter((p) =>
         p.n.z < -0.05 && p.area >= PERP.minArea && (p.u1 - p.u0) >= PERP.minWidth);
-      const veto = wedgeVeto(wedgeable, topo, rot, off, { tines: cfg.tines, pitch: coverPitch(cfg.coverage), tineDensity: undefined });
+      const veto = cfg.veto === 'odd' ? (q) => q.id % 2 === 1
+        : wedgeVeto(wedgeable, topo, rot, off, { tines: cfg.tines, pitch: coverPitch(cfg.coverage), tineDensity: undefined });
       vetoCalls = [];
       opts.rasterVeto = (q, np) => {
         const cap = globalThis.__TINECAP, l0 = cap?.length ?? 0;
@@ -403,7 +450,7 @@ for (const [model, rotStr] of SCENES) {
     cfgs: CFGS, cap0: capArr(CAP0), PROP: PROP0, nRegions: result.regions.length,
     consts: { PART_BAND: AT.PART_BAND, RACE_REL: RA.RACE_REL, RACE_ABS: RA.RACE_ABS, RASTER_SKIP_HELD: RA.RASTER_SKIP_HELD,
               GRIP_RISE: RA.GRIP_RISE, GRIP_RISE_REL: RA.GRIP_RISE_REL },
-    regionTris: regions.map((r) => Array.from(r.regionTris)), cases }, replacer));
+    cases }, replacer));
   const att = cases.filter((c) => c.fn === 'attached');
   const races = cases.filter((c) => c.fn === 'race');
   console.log(name, `regions ${result.regions.length}, attached ${att.length} (ok ${att.filter((c) => c.ok).length},`,

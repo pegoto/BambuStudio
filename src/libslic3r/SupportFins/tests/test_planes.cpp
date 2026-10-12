@@ -19,6 +19,7 @@
 // sample points, the planes constants, and the libm-derived cut constants (bitwise).
 // Also counts how many compared doubles were not bit-identical (informational).
 #include "Engine/Planes.hpp"
+#include "Engine/Ieee754.hpp"
 #include "nlohmann/json.hpp"
 
 #include <algorithm>
@@ -99,8 +100,8 @@ bool runDump(const fs::path &file) {
     // the cuts findWallPatches derives with Math.sin / Math.cos: must be bit-identical,
     // they decide which faces are upright / agree with their seed
     {
-        const double leanCut = std::sin((MAX_LEAN_DEG * M_PI) / 180) + 1e-6;
-        const double agreeCut = std::cos((NORMAL_AGREE_DEG * M_PI) / 180);
+        const double leanCut = js_sin((MAX_LEAN_DEG * M_PI) / 180) + 1e-6;
+        const double agreeCut = js_cos((NORMAL_AGREE_DEG * M_PI) / 180);
         if (leanCut != J["leanCut"].get<double>()) fail("leanCut differs from JS (libm sin)");
         if (agreeCut != J["agreeCut"].get<double>()) fail("agreeCut differs from JS (libm cos)");
     }

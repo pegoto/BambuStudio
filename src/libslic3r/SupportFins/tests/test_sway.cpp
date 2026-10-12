@@ -20,6 +20,7 @@
 // lists them).
 #include "Engine/Overhangs.hpp"
 #include "Engine/Sway.hpp"
+#include "Engine/Ieee754.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -228,7 +229,7 @@ bool runDump(const fs::path &file) {
 
     checkSwayConstants(J["SWAY"]);
     {   // the lean cut every upright test compares against (libm sin vs V8's fdlibm)
-        const double leanCut = std::sin((SWAY.maxLeanDeg * M_PI) / 180);
+        const double leanCut = js_sin((SWAY.maxLeanDeg * M_PI) / 180);
         if (leanCut != J["leanCut"].get<double>()) fail("leanCut differs from JS (libm sin)");
     }
 
@@ -251,7 +252,7 @@ bool runDump(const fs::path &file) {
         const std::vector<WallPatch> patches = findWallPatches(topo, rot, result.offset);
         checkI(long(patches.size()), long(J["bearings"].size()), "patch count");
         for (size_t k = 0; k < std::min(patches.size(), J["bearings"].size()); k++) {
-            const double b = std::atan2(patches[k].n.y, patches[k].n.x);
+            const double b = js_atan2(patches[k].n.y, patches[k].n.x);
             if (b != J["bearings"][k].get<double>()) g_bearingDiff++;
             checkD(b, J["bearings"][k], "bearing[" + std::to_string(k) + "]");
         }
