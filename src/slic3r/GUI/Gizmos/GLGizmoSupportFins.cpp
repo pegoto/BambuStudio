@@ -10,6 +10,7 @@
 #include "slic3r/GUI/ImGuiWrapper.hpp"
 #include "slic3r/GUI/MeshUtils.hpp"
 #include "slic3r/GUI/Plater.hpp"
+#include "libslic3r/AppConfig.hpp"
 #include "libslic3r/Model.hpp"
 #include "libslic3r/PresetBundle.hpp"
 #include "libslic3r/format.hpp"
@@ -20,6 +21,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <exception>
 #include <limits>
@@ -130,10 +132,50 @@ double GLGizmoSupportFins::print_layer_height(const ModelObject &mo) const
     return SupportFinOptions().layer_height;
 }
 
+int GLGizmoSupportFins::filament_material(const ModelObject &mo, std::string &filament_type) const
+{
+    // The engine only knows PLA and PETG (options.json material); the slicer already knows which
+    // filament the part prints with, so ask it instead of asking the user.
+    filament_type.clear();
+    int extruder = 1;
+    for (const ModelVolume *mv : mo.volumes)
+        if (mv->is_model_part() && !mv->is_support_fin()) {
+            extruder = mv->extruder_id();
+            break;
+        }
+    PresetBundle *bundle = wxGetApp().preset_bundle;
+    if (bundle == nullptr || extruder < 1 || extruder > int(bundle->filament_presets.size()))
+        return -1;
+    const Preset *preset = bundle->filaments.find_preset(bundle->filament_presets[size_t(extruder - 1)]);
+    if (preset == nullptr)
+        return -1;
+    const ConfigOptionStrings *opt = preset->config.option<ConfigOptionStrings>("filament_type");
+    if (opt == nullptr || opt->values.empty())
+        return -1;
+    filament_type = opt->values.front();
+    std::string type = filament_type;
+    for (char &c : type)
+        c = char(std::toupper(static_cast<unsigned char>(c)));
+    auto starts_with = [&type](const char *prefix) { return type.rfind(prefix, 0) == 0; };
+    if (starts_with("PLA"))
+        return 0;
+    if (starts_with("PETG") || starts_with("PCTG") || starts_with("PET"))
+        return 1;
+    return -1;
+}
+
+int GLGizmoSupportFins::effective_material(const ModelObject &mo) const
+{
+    if (!m_panel.material_auto)
+        return std::clamp(m_panel.material, 0, 1);
+    std::string filament_type;
+    return std::max(filament_material(mo, filament_type), 0);
+}
+
 SupportFinOptions GLGizmoSupportFins::build_options(const ModelObject &mo) const
 {
     SupportFinOptions o;
-    o.material          = MATERIAL_VALUES[std::clamp(m_panel.material, 0, 1)];
+    o.material          = MATERIAL_VALUES[effective_material(mo)];
     o.threshold         = m_panel.threshold;
     o.tines             = m_panel.tines;
     o.tine_density      = m_panel.tine_density / 100.;
@@ -167,6 +209,11 @@ void GLGizmoSupportFins::load_panel_from(const ModelObject &mo)
         m_panel.cutout            = choice_index(CUTOUT_VALUES, o.cutout, 0);
         m_panel.coverage          = float(o.coverage * 100.);
         m_panel.plate_only        = o.plate_only;
+        // Saved fins store the resolved material only. If it still matches the filament, keep following
+        // the filament; if it differs, it was picked by hand.
+        std::string filament_type;
+        const int   from_filament = std::max(filament_material(mo, filament_type), 0);
+        m_panel.material_auto     = m_panel.material == from_filament;
     }
     m_overlay_threshold = m_panel.threshold;
 }
@@ -185,6 +232,7 @@ void GLGizmoSupportFins::on_set_state()
         m_stale_dirty     = true;
         m_readout.clear();
         m_readout_is_error = false;
+        m_show_all         = wxGetApp().app_config->get("support_fins_show_all") == "1";
     } else if (m_state == Off) {
         m_draw_points.clear();
         m_selected_fin          = ObjectID();
@@ -281,11 +329,33 @@ void GLGizmoSupportFins::rebuild_topology(const ModelObject &mo, int instance_id
 {
     m_topology.reset();
     m_face_class.clear();
-    m_overlay_dirty = true;
+    m_overlay_dirty  = true;
+    m_part_height    = 0.f;
+    m_part_min_width = 0.f;
     try {
         m_posed_part = support_fins_posed_part(mo, instance_idx);
         if (m_posed_part.indices.empty())
             return;
+        // Size of the posed part for the sway-brace hint: height, and the narrowest width of its
+        // shadow on the plate (checked every 10 degrees, so a slim part turned on the plate still counts).
+        float z_min = std::numeric_limits<float>::max(), z_max = -std::numeric_limits<float>::max();
+        for (const stl_vertex &v : m_posed_part.vertices) {
+            z_min = std::min(z_min, v.z());
+            z_max = std::max(z_max, v.z());
+        }
+        float min_width = std::numeric_limits<float>::max();
+        for (int step = 0; step < 18; ++step) {
+            const float a = float(step) * float(PI) / 18.f, c = std::cos(a), s = std::sin(a);
+            float lo = std::numeric_limits<float>::max(), hi = -std::numeric_limits<float>::max();
+            for (const stl_vertex &v : m_posed_part.vertices) {
+                const float p = v.x() * c + v.y() * s;
+                lo = std::min(lo, p);
+                hi = std::max(hi, p);
+            }
+            min_width = std::min(min_width, hi - lo);
+        }
+        m_part_height    = z_max - z_min;
+        m_part_min_width = min_width;
         SupportFins::Soup soup;
         soup.reserve(m_posed_part.indices.size() * 9);
         for (const stl_triangle_vertex_indices &f : m_posed_part.indices)
@@ -299,6 +369,8 @@ void GLGizmoSupportFins::rebuild_topology(const ModelObject &mo, int instance_id
     } catch (const std::exception &) {
         m_topology.reset();
         m_posed_part.clear();
+        m_part_height    = 0.f;
+        m_part_min_width = 0.f;
     }
 }
 
@@ -902,56 +974,113 @@ void GLGizmoSupportFins::on_render_input_window(float x, float y, float bottom_l
     ImGui::SameLine();
     m_imgui->text(_L("Draw"));
 
-    // --- Setup
-    section(_L("Setup"));
-    combo_row(lbl_material, {_u8L("PLA"), _u8L("PETG")}, m_panel.material,
-              _L("The filament you'll print in. PETG fuses to supports much harder than PLA, so PETG loosens the gaps and gives the bed pad a gap instead of a tack. PLA keeps the tighter grip."));
-    if (slider_row(lbl_threshold, "sf_threshold", m_panel.threshold, 30.f, 70.f, 1.f, "%.0f", _L("°"),
-                   _L("Surface angle from the plate below which a face needs support.")))
-        // Re-run the overlay analysis only when the drag ends (not on every slider tick).
-        m_overlay_threshold = m_panel.threshold;
-
-    // --- Tines
-    section(_L("Tines"));
-    checkbox_row(lbl_tines, m_panel.tines, _L("grip the part"),
-                 _L("Tines fuse the support to the part so it grips instead of just propping. Off = plain breakaway wall."));
-    if (m_panel.tines)
-        slider_row(lbl_tine_grip, "sf_tine_density", m_panel.tine_density, 0.f, 100.f, 5.f, "%.0f%%", _L("light - firm"),
-                   _L("How tightly to space the grip tines. Light = fewest marks (default), a per-wall floor keeps grip; Firm = dense comb / max grip for a tippy or tall part."));
-    if (m_panel.tines || m_panel.pad_style == 1 /*auto*/ || m_panel.pad_style == 2 /*light*/) {
-        // hostSupplied 'slicer': read from the print settings, never edited here.
-        ImGui::AlignTextToFramePadding();
-        m_imgui->text_colored(HINT_TEXT_COLOR, wxString::Format(_L("Layer height: %.2f mm (from print settings)"), print_layer_height(*mo)));
-        show_tooltip(_L("The grip tines are one layer tall so they snap off clean; they are made for the layer height you slice at."));
-    }
-
-    // --- Clearances
-    section(_L("Clearances"));
-    combo_row(lbl_pad, {_u8L("Off"), _u8L("Auto"), _u8L("Light"), _u8L("Sure hold")}, m_panel.pad_style,
-              _L("A tilted part rests on an edge and peels off the plate without a pad. Auto: Light, or Sure hold when the part meets the plate on a point or a small round foot. Light: one layer, 0.12mm off the part, peels off like a brim. Sure hold: thicker and tacked into the part, holds harder but is harder to remove."));
-
-    // --- Sway braces
-    section(_L("Sway braces"));
-    checkbox_row(lbl_sway, m_panel.sway, _L("tall parts"),
-                 _L("Stand tapered buttress ribs against the upright sides of a tall part, tied on with tines all the way up, so it doesn't drift or wobble as it grows."));
-    if (m_panel.sway && m_panel.tines) {
-        number_row(lbl_grip_from, "sf_sway_grip_from", m_panel.sway_grip_from, 0.f, 2000.f, 5.f, "%.0f", _L("mm up"),
-                   _L("Height the brace tines start at. 0 = grip the whole height; raise it to tie on only above where the part starts to move."));
-        number_row(lbl_tine_spc, "sf_sway_tine_spacing", m_panel.sway_tine_spacing, 2.f, 30.f, 1.f, "%.0f", _L("mm"),
-                   _L("Vertical distance between brace tines. Smaller = held tighter, more marks on the side. Default 6mm."));
-    }
+    // --- What Generate will use. The defaults ARE the recommendation (upstream options.json): tines on at
+    // light grip, bed pad Auto, layer height from the print settings, and now the material from the
+    // filament. So the panel opens on one line saying so; the full option set sits under "Show all settings".
+    ImGui::Separator();
+    std::string    filament_type;
+    const int      from_filament = filament_material(*mo, filament_type);
+    const wxString sep           = from_u8(" · ");
+    const wxString material_name = effective_material(*mo) == 1 ? _L("PETG") : _L("PLA");
+    wxString       summary;
+    if (!m_panel.material_auto)
+        summary = material_name;
+    else if (from_filament >= 0)
+        summary = wxString::Format(_L("%s (from the filament)"), material_name);
+    else
+        summary = wxString::Format(_L("PLA settings (%s filament; fins are tuned for PLA and PETG)"),
+                                   from_u8(filament_type.empty() ? std::string("unknown") : filament_type));
+    summary += sep + (!m_panel.tines ? _L("no tines") :
+                      m_panel.tine_density < 34.f ? _L("light tines") :
+                      m_panel.tine_density < 67.f ? _L("medium tines") : _L("firm tines"));
+    summary += sep + (m_panel.pad_style == 0 ? _L("no bed pad") :
+                      m_panel.pad_style == 1 ? _L("bed pad auto") :
+                      m_panel.pad_style == 2 ? _L("light bed pad") : _L("sure-hold bed pad"));
     if (m_panel.sway)
-        number_row(lbl_reach, "sf_sway_reach", m_panel.sway_reach, 5.f, 50.f, 1.f, "%.0f", _L("% of height"),
-                   _L("How far the brace reaches out at the bed, as a share of its height. Deeper = stiffer, more plastic. Default 15%."));
+        summary += sep + _L("sway braces");
+    // Anything changed from the defaults stays visible here even when the full panel is folded away.
+    const Panel defaults{};
+    if (m_panel.threshold != defaults.threshold)
+        summary += sep + wxString::Format(_L("overhang %.0f°"), m_panel.threshold);
+    if (m_panel.cutout != defaults.cutout)
+        summary += sep + _L("cutouts");
+    if (m_panel.coverage != defaults.coverage)
+        summary += sep + wxString::Format(_L("coverage %.0f%%"), m_panel.coverage);
+    if (m_panel.plate_only)
+        summary += sep + _L("plate only");
+    m_imgui->text_wrapped(summary, wrap_width);
 
-    // --- Walls
-    section(_L("Walls"));
-    combo_row(lbl_cutout, {_u8L("None"), _u8L("Diamond"), _u8L("Triangle"), _u8L("Arch"), _u8L("Lattice")}, m_panel.cutout,
-              _L("Cut holes through tall breakaway walls to save filament. The top edge that holds the part, the foot, and the wall's ends stay solid, and every hole has a pointed roof so it prints without bridging. Short walls stay solid."));
-    slider_row(lbl_coverage, "sf_coverage", m_panel.coverage, 0.f, 100.f, 5.f, "%.0f%%", _L("sparse - dense"),
-               _L("How densely to line a WIDE overhang face with fins. The middle is the anti-sag default; drag LEFT for fewer fins (a small part can go down to one - the readout warns if a broad face then risks sagging), RIGHT for more support. Narrow parts are unaffected."));
-    checkbox_row(lbl_plate_only, m_panel.plate_only, _L("no supports on the part"),
-                 _L("Stand every support on the build plate, never on the part itself. An overhang with part under it is left unsupported, and the readout says how many."));
+    // Sway braces are the one choice that depends on the part, so hint (never switch them on silently)
+    // when it is tall and slim. The 3:1 ratio and 30 mm floor are a first guess, not from upstream.
+    const bool tall_and_slim = m_part_height >= 30.f && m_part_height > 3.f * std::max(m_part_min_width, 0.1f);
+    if (tall_and_slim && !m_panel.sway) {
+        m_imgui->warning_text_wrapped(wxString::Format(_L("Tall, slim part (%.0f mm high, %.0f mm wide): sway braces recommended so it doesn't wobble."),
+                                                       m_part_height, m_part_min_width), wrap_width);
+        if (m_imgui->button(_L("Add sway braces")))
+            m_panel.sway = true;
+    }
+
+    if (m_imgui->bbl_checkbox(_L("Show all settings"), m_show_all))
+        wxGetApp().app_config->set("support_fins_show_all", m_show_all ? "1" : "0");
+
+    if (m_show_all) {
+        // --- Setup
+        section(_L("Setup"));
+        const bool material_was_auto = m_panel.material_auto;
+        checkbox_row(_L("Material from filament"), m_panel.material_auto, wxString(),
+                     _L("Use the filament the part prints with: PLA-type filaments get the PLA settings, PETG/PCTG get the PETG settings. Untick to choose by hand."));
+        if (material_was_auto && !m_panel.material_auto)
+            m_panel.material = std::max(from_filament, 0); // start the manual choice from what was being used
+        if (!m_panel.material_auto)
+            combo_row(lbl_material, {_u8L("PLA"), _u8L("PETG")}, m_panel.material,
+                      _L("The filament you'll print in. PETG fuses to supports much harder than PLA, so PETG loosens the gaps and gives the bed pad a gap instead of a tack. PLA keeps the tighter grip."));
+        if (slider_row(lbl_threshold, "sf_threshold", m_panel.threshold, 30.f, 70.f, 1.f, "%.0f", _L("°"),
+                       _L("Surface angle from the plate below which a face needs support.")))
+            // Re-run the overlay analysis only when the drag ends (not on every slider tick).
+            m_overlay_threshold = m_panel.threshold;
+
+        // --- Tines
+        section(_L("Tines"));
+        checkbox_row(lbl_tines, m_panel.tines, _L("grip the part"),
+                     _L("Tines fuse the support to the part so it grips instead of just propping. Off = plain breakaway wall."));
+        if (m_panel.tines)
+            slider_row(lbl_tine_grip, "sf_tine_density", m_panel.tine_density, 0.f, 100.f, 5.f, "%.0f%%", _L("light - firm"),
+                       _L("How tightly to space the grip tines. Light = fewest marks (default), a per-wall floor keeps grip; Firm = dense comb / max grip for a tippy or tall part."));
+        if (m_panel.tines || m_panel.pad_style == 1 /*auto*/ || m_panel.pad_style == 2 /*light*/) {
+            // hostSupplied 'slicer': read from the print settings, never edited here.
+            ImGui::AlignTextToFramePadding();
+            m_imgui->text_colored(HINT_TEXT_COLOR, wxString::Format(_L("Layer height: %.2f mm (from print settings)"), print_layer_height(*mo)));
+            show_tooltip(_L("The grip tines are one layer tall so they snap off clean; they are made for the layer height you slice at."));
+        }
+
+        // --- Clearances
+        section(_L("Clearances"));
+        combo_row(lbl_pad, {_u8L("Off"), _u8L("Auto"), _u8L("Light"), _u8L("Sure hold")}, m_panel.pad_style,
+                  _L("A tilted part rests on an edge and peels off the plate without a pad. Auto: Light, or Sure hold when the part meets the plate on a point or a small round foot. Light: one layer, 0.12mm off the part, peels off like a brim. Sure hold: thicker and tacked into the part, holds harder but is harder to remove."));
+
+        // --- Sway braces
+        section(_L("Sway braces"));
+        checkbox_row(lbl_sway, m_panel.sway, _L("tall parts"),
+                     _L("Stand tapered buttress ribs against the upright sides of a tall part, tied on with tines all the way up, so it doesn't drift or wobble as it grows."));
+        if (m_panel.sway && m_panel.tines) {
+            number_row(lbl_grip_from, "sf_sway_grip_from", m_panel.sway_grip_from, 0.f, 2000.f, 5.f, "%.0f", _L("mm up"),
+                       _L("Height the brace tines start at. 0 = grip the whole height; raise it to tie on only above where the part starts to move."));
+            number_row(lbl_tine_spc, "sf_sway_tine_spacing", m_panel.sway_tine_spacing, 2.f, 30.f, 1.f, "%.0f", _L("mm"),
+                       _L("Vertical distance between brace tines. Smaller = held tighter, more marks on the side. Default 6mm."));
+        }
+        if (m_panel.sway)
+            number_row(lbl_reach, "sf_sway_reach", m_panel.sway_reach, 5.f, 50.f, 1.f, "%.0f", _L("% of height"),
+                       _L("How far the brace reaches out at the bed, as a share of its height. Deeper = stiffer, more plastic. Default 15%."));
+
+        // --- Walls
+        section(_L("Walls"));
+        combo_row(lbl_cutout, {_u8L("None"), _u8L("Diamond"), _u8L("Triangle"), _u8L("Arch"), _u8L("Lattice")}, m_panel.cutout,
+                  _L("Cut holes through tall breakaway walls to save filament. The top edge that holds the part, the foot, and the wall's ends stay solid, and every hole has a pointed roof so it prints without bridging. Short walls stay solid."));
+        slider_row(lbl_coverage, "sf_coverage", m_panel.coverage, 0.f, 100.f, 5.f, "%.0f%%", _L("sparse - dense"),
+                   _L("How densely to line a WIDE overhang face with fins. The middle is the anti-sag default; drag LEFT for fewer fins (a small part can go down to one - the readout warns if a broad face then risks sagging), RIGHT for more support. Narrow parts are unaffected."));
+        checkbox_row(lbl_plate_only, m_panel.plate_only, _L("no supports on the part"),
+                     _L("Stand every support on the build plate, never on the part itself. An overhang with part under it is left unsupported, and the readout says how many."));
+    }
 
     // --- Overlay legend
     ImGui::Separator();

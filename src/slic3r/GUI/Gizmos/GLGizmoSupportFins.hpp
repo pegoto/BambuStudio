@@ -55,7 +55,8 @@ private:
     // Panel values in the units the controls show (percent controls x100), see options.json.
     struct Panel
     {
-        int   material          = 0;     // 0 pla, 1 petg
+        bool  material_auto     = true;  // follow the object's filament (PLA family -> pla, PETG family -> petg)
+        int   material          = 0;     // 0 pla, 1 petg (used when !material_auto)
         float threshold         = 45.f;  // deg from the plate
         bool  tines             = true;
         float tine_density      = 0.f;   // %, 0..100
@@ -94,6 +95,11 @@ private:
     // (never cached across a snapshot / reload). Returns nullptr when there is none.
     ModelObject* selected_object(int& obj_idx, int& instance_idx) const;
     double       print_layer_height(const ModelObject& mo) const;
+    // Engine material index (0 pla, 1 petg) of the filament the object prints with, -1 when that
+    // filament is neither family. filament_type gets the preset's filament_type either way.
+    int          filament_material(const ModelObject& mo, std::string& filament_type) const;
+    // The material the engine gets: the filament's when material_auto (PLA when it is neither), else the panel's.
+    int          effective_material(const ModelObject& mo) const;
     SupportFinOptions build_options(const ModelObject& mo) const;
     void         load_panel_from(const ModelObject& mo);
 
@@ -121,6 +127,7 @@ private:
 
     Mode        m_mode = Mode::Auto;
     Panel       m_panel;
+    bool        m_show_all = false;      // "Show all settings" (app_config support_fins_show_all)
     ObjectID    m_panel_object_id;   // object the panel values were loaded from
 
     // overhang analysis of the posed part (support_fins_posed_part)
@@ -130,6 +137,8 @@ private:
     float                 m_analyzed_threshold = -1.f;  // threshold the overlay was computed for
     std::vector<uint8_t>  m_face_class;      // per posed face: 0 none, 1 red (fins), 2 amber (too small)
     indexed_triangle_set  m_posed_part;
+    float                 m_part_height    = 0.f; // posed part: Z extent, mm
+    float                 m_part_min_width = 0.f; // posed part: narrowest XY extent over 10-degree steps, mm
     bool                  m_overlay_dirty = true; // GL models need rebuilding
     GLModel               m_red_model;
     GLModel               m_amber_model;
