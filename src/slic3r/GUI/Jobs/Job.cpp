@@ -3,6 +3,7 @@
 
 #include "Job.hpp"
 #include <libslic3r/Thread.hpp>
+#include <wx/thread.h>
 #include <boost/log/trivial.hpp>
 
 namespace Slic3r {
@@ -30,14 +31,26 @@ void GUI::Job::update_status(int st, const wxString &msg)
     wxQueueEvent(this, evt);
 }
 
+// Both are called from process(), i.e. the worker thread. The status bar shows/hides controls and
+// resizes the print dialog, and AppKit (macOS 27) aborts on window changes off the main thread
+// ("Must only be used from the main thread", EXC_BREAKPOINT in NSWindow _setFrameCommon when a
+// print send fails). Post them to the main thread, the same way update_status() posts its event.
 void GUI::Job::update_percent_finish()
 {
-    m_progress->clear_percent();
+    if (wxIsMainThread()) {
+        m_progress->clear_percent();
+        return;
+    }
+    CallAfter([this]() { m_progress->clear_percent(); });
 }
 
 void GUI::Job::show_error_info(wxString msg, int code, wxString description, wxString extra)
 {
-    m_progress->show_error_info(msg, code, description, extra);
+    if (wxIsMainThread()) {
+        m_progress->show_error_info(msg, code, description, extra);
+        return;
+    }
+    CallAfter([this, msg, code, description, extra]() { m_progress->show_error_info(msg, code, description, extra); });
 }
 
 GUI::Job::Job(std::shared_ptr<ProgressIndicator> pri)
